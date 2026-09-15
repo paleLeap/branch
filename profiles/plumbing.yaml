@@ -1,0 +1,47 @@
+trade: plumbing
+display_name: Plumbing
+thresholds: {subject: 3, intent: 3}
+recency_half_life_hours: 12   # water damage is an emergency; 12h old is already late
+
+subject:
+  - terms: [plumbing, plumber, pipe, drain, sewer, faucet, toilet, shower, bathtub,
+            water heater, sump pump, garbage disposal, septic, spigot, water main]
+    weight: 3
+    label: fixture
+  - terms: ["hot water", "cold water", "water pressure", "sewer line", "main line"]
+    weight: 2
+    label: system
+
+intent:
+  - terms: [leak*, flooding, "burst pipe", "backing up", "backed up", clogged, "won't drain",
+            "no hot water", "water everywhere", overflow*, "sewage smell"]
+    weight: 4
+    label: failure
+  - terms: ["any recommendation*", "anyone know a", "need a plumber", "who do you use",
+            "know a good", "can anyone help", "emergency plumber"]
+    weight: 4
+    label: asking-for-help
+  - terms: ["how much should", "quoted me", "what would it cost", "is that reasonable",
+            "second opinion", "estimate for"]
+    weight: 3
+    label: price-checking
+
+exclude:
+  - terms: ["for sale", wtb, "parting out", "asking $", obo]
+    label: marketplace-sale
+  - terms: [hiring, "now hiring", "job posting", resume, apprentice*, "journeyman position"]
+    label: job-post
+  - terms: ["diy tutorial", "how i fixed", "in case it helps someone", "solved it myself"]
+    label: already-resolved
+
+boost: {question_mark: 1, first_person: 2}
+negation: {window: 4, terms: [not, no, never, dont, doesnt, didnt, wont, cant, already, fixed, solved]}
+
+suggestions: ["water heater", "burst pipe", "no hot water", "sewer backup",
+              "clogged drain", toilet, "leaking under sink", "sump pump",
+              "low water pressure", "frozen pipe"]
+
+# How this trade's customers phrase the request itself. Used to build the
+# Facebook search query: "need a plumber Dallas" finds people who want one,
+# where "water heater Dallas" finds people discussing water heaters.
+ask: ["plumber recommendations", "need a plumber", "looking for a plumber", "good plumber", "plumber near me", "anyone know a plumber", "emergency plumber", "water heater replaced", "who can fix my", "need someone to fix"]

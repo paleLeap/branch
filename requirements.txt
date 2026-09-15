@@ -1,0 +1,6 @@
+# Branch runtime dependencies. Pinned so a build handed to a friend in six months
+# is the same build. No AI SDKs, by design -- see docs/CLASSIFICATION.md.
+#
+# Python 3.10 or newer.
+PyYAML==6.0.3
+PySide6==6.10.2

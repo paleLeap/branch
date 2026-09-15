@@ -1,0 +1,57 @@
+trade: wedding-photography
+display_name: Wedding Photography
+notes: >
+  Deliberately unlike the repair trades: the signal is a planned future event,
+  not a breakage. Demand is seasonal and books far ahead, so recency decays slowly.
+thresholds: {subject: 3, intent: 3}
+recency_half_life_hours: 336   # two weeks; people shop for this over months
+
+subject:
+  - terms: [wedding, engagement, elopement, reception, ceremony, bridal, "save the date"]
+    weight: 3
+    label: event
+  - terms: [photographer, photography, photos, videographer, "engagement shoot", "first look"]
+    weight: 3
+    label: service
+  - terms: [venue, officiant, florist, caterer, "wedding party", bridesmaid*, groomsmen]
+    weight: 1
+    label: adjacent
+
+intent:
+  - terms: ["looking for a photographer", "need a photographer", "any recommendation*",
+            "who did your", "know a good", "still looking for", "photographer fell through",
+            "our photographer cancelled"]
+    weight: 4
+    label: asking-for-help
+  - terms: ["getting married", "just got engaged", "we're engaged", "planning our wedding",
+            "booking vendor*", "budget for photo*"]
+    weight: 3
+    label: planning
+  - terms: ["how much should", "what did you pay", "is that reasonable", "average cost",
+            "worth the money"]
+    weight: 3
+    label: price-checking
+
+exclude:
+  - terms: [hiring, "second shooter wanted", "job posting", resume, "assistant needed"]
+    label: job-post
+  - terms: ["my portfolio", "check out my", "booking now", "dm me for rates", "taking clients",
+            "limited slots", "here are my packages"]
+    label: photographer-advertising   # other photographers, not clients
+  - terms: ["already booked", "so glad we chose", "here are our photos", "review of our"]
+    label: already-served
+
+boost: {question_mark: 1, first_person: 2}
+negation: {window: 4, terms: [not, no, never, dont, doesnt, didnt, wont, cant, already, booked]}
+
+suggestions: ["photographer cancelled", engagement, elopement, "still looking",
+              "booking vendors", venue, "just got engaged", budget,
+              "second shooter", "save the date"]
+
+forums:
+  - https://discuss.pixls.us
+
+# How this trade's customers phrase the request itself. Used to build the
+# Facebook search query: "need a plumber Dallas" finds people who want one,
+# where "water heater Dallas" finds people discussing water heaters.
+ask: ["need a wedding photographer", "looking for a photographer", "wedding photographer recommendation", "photographer recommendations", "photographer cancelled", "anyone know a photographer", "affordable photographer", "need photos taken", "engagement photos", "last minute photographer"]

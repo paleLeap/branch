@@ -1,0 +1,40 @@
+# Exclusions merged into EVERY profile.
+#
+# These are the false positives that are not specific to any trade: news, product
+# announcements, reviews and listicles. They matter most on the global sources --
+# Hacker News, Lemmy, Mastodon -- where the population is people discussing an
+# industry rather than people needing a service. A plumbing scan was matching
+# "Hitachi launches CO2 heat pump water heaters" on "water heater" + "leak".
+#
+# A profile can still match one of these words in its own subject or intent list;
+# exclusions only win when they appear in the post.
+
+exclude:
+  - terms: [launches, unveils, announces, "hands-on", unboxing, teardown,
+            "first look", "our review", "reviewed:", "vs.", "top 10", "best of",
+            roundup, "buying guide", "deal alert", "now available", "press release"]
+    label: news-and-product-announcements
+  - terms: ["show hn", "ask hn", "launch hn", "i built", "i made", "my project",
+            "open source", "github.com", "just shipped"]
+    label: project-announcements
+
+  # The trade advertising ITSELF. On Facebook this is the single largest false
+  # positive: search "need a plumber Dallas" and half the results are plumbing
+  # companies, whose adverts naturally contain every word a customer would use.
+  # A scan for plumbing leads returned four competitors in nine results before
+  # this group existed.
+  - terms: ["we fix", "we repair", "we install", "call us", "call now", "call today",
+            "free estimate", "free quote", "licensed and insured", "our technicians",
+            "our team", "book now", "schedule today", "same day service", "24/7",
+            "no job too", "satisfaction guaranteed", "financing available",
+            "serving the", "years of experience", "fully insured", "give us a call",
+            "contact us today", "we offer"]
+    label: the-trade-advertising-itself
+
+  # Someone recommending a business, rather than looking for one. A near-miss:
+  # "any recommendations?" is a genuine request and must still match, so these
+  # are phrased as statements, not questions.
+  - terms: ["highly recommended", "i recommend", "we recommend", "cannot recommend",
+            "can't recommend", "shout out to", "shoutout to", "big thanks to",
+            "did a great job", "did an amazing job", "10/10 would"]
+    label: recommending-not-asking

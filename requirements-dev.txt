@@ -1,0 +1,6 @@
+# Build-time only. Not needed to run Branch -- see requirements.txt for that.
+#
+# Pinned for the same reason the runtime pins are: a build made in six months
+# should be the build we tested, not whatever PyInstaller shipped that week.
+-r requirements.txt
+pyinstaller==6.16.0

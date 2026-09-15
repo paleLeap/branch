@@ -1,0 +1,52 @@
+trade: it-support
+display_name: IT Support / Managed Services
+thresholds: {subject: 3, intent: 3}
+recency_half_life_hours: 72   # business IT pain simmers; a 3-day-old post is still live
+
+subject:
+  - terms: [server, network, wifi, firewall, vpn, backup, ransomware, "active directory",
+            office 365, microsoft 365, sharepoint, quickbooks, workstation, nas]
+    weight: 3
+    label: system
+  - terms: ["our office", "small business", "my company", "our team", employee*, "point of sale", pos]
+    weight: 2
+    label: business-context
+
+intent:
+  - terms: ["keeps crashing", "won't connect", "so slow", "lost all our", "got hit with",
+            "locked out", "keeps dropping", "blue screen", "data loss"]
+    weight: 4
+    label: failure
+  - terms: ["any recommendation*", "looking for an it", "need an it guy", "managed service*",
+            "who do you use", "know a good", "can anyone help", "looking to outsource"]
+    weight: 4
+    label: asking-for-help
+  - terms: ["how much should", "quoted us", "what would it cost", "is that reasonable",
+            "per seat", "monthly retainer"]
+    weight: 3
+    label: price-checking
+
+exclude:
+  - terms: [hiring, "now hiring", "job posting", resume, "apply within", "salary range", "w2", "c2c"]
+    label: job-post
+  - terms: ["for sale", wtb, "asking $", "discount code", "affiliate link", "check out my"]
+    label: sale-or-promo
+  - terms: ["homework", "for my class", "school project", "study guide"]
+    label: student
+boost: {question_mark: 1, first_person: 2}
+negation: {window: 4, terms: [not, no, never, dont, doesnt, didnt, wont, cant, already, fixed, solved]}
+
+suggestions: [ransomware, backup, "server down", "wifi dropping", "office 365",
+               "slow network", firewall, "email problems", "point of sale",
+               "lost data"]
+
+# Discourse forums worth reading for this trade. The Forums source searches these
+# plus anything in ~/.config/branch/forums.txt. Verified reachable 2026-09-15.
+forums:
+  - https://community.spiceworks.com
+  - https://forum.level1techs.com
+
+# How this trade's customers phrase the request itself. Used to build the
+# Facebook search query: "need a plumber Dallas" finds people who want one,
+# where "water heater Dallas" finds people discussing water heaters.
+ask: ["need an IT company", "IT support recommendation", "managed IT services", "IT guy recommendation", "anyone do IT support", "need IT help", "computer guy recommendation", "network help", "server help", "who handles our IT"]

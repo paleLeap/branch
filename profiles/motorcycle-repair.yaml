@@ -1,0 +1,68 @@
+trade: motorcycle-repair
+display_name: Motorcycle Repair
+notes: >
+  Test profile and reference example. Terms are written singular; the matcher
+  handles plurals. Use * for open-ended stems ("leak*" -> leaking, leaks, leakage).
+
+thresholds: {subject: 3, intent: 3}
+recency_half_life_hours: 48   # a stranded bike is urgent; a week-old post is cold
+
+subject:
+  - terms: [motorcycle, motorbike, bike, moto, scooter, dirtbike, atv]
+    weight: 3
+    label: vehicle
+  - terms: [harley, honda, yamaha, kawasaki, suzuki, ducati, triumph, ktm, bmw,
+            sportster, bonneville, ninja, goldwing, softail]
+    weight: 2
+    label: marque
+  - terms: [carb, carburetor, clutch, sprocket, fork seal, stator, cdi, petcock,
+            spark plug, chain, swingarm, throttle body, valve clearance]
+    weight: 3
+    label: component
+
+intent:
+  - terms: ["won't start", "wont turn over", "doesn't run", "died on me",
+            "keeps stalling", "stopped running", "cutting out", "backfir*"]
+    weight: 4
+    label: failure
+  - terms: ["any recommendation*", "anyone know a", "looking for a shop",
+            "who do you use", "need a mechanic", "know a good", "can anyone help"]
+    weight: 4
+    label: asking-for-help
+  - terms: ["how much should", "quoted me", "is this worth fixing", "what would it cost",
+            "shop wants", "estimate for"]
+    weight: 3
+    label: price-checking
+  - terms: [leak*, "grinding noise", "burning smell", "warning light", "blown fuse",
+            "flat spot", "hard to shift"]
+    weight: 2
+    label: symptom
+
+exclude:
+  - terms: ["for sale", "fs:", wtb, "want to buy", "parting out", "asking $",
+            "price is firm", obo, "trade for", "selling my"]
+    label: marketplace-sale
+    # On Marketplace a broken bike listed cheap is the strongest signal this trade\n  # gets -- the seller gave up on it, and whoever buys it will need the work\n  # doing. So the sale exclusion is switched off there, and only there.
+    except_venues: [marketplace]
+  - terms: [hiring, "now hiring", "job posting", resume, "apply within", "we are looking for",
+            "$/hr", "per hour"]
+    label: job-post
+  - terms: ["insurance quote", financing, "rent to own", "test ride event", giveaway, sweepstake*]
+    label: promo
+
+boost: {question_mark: 1, first_person: 2}
+negation:
+  window: 4
+  terms: [not, no, never, dont, doesnt, didnt, wont, cant, "no longer", already, fixed]
+
+# Example things to type in the search box. The box NARROWS an already
+# trade-filtered result set, so these are symptoms and parts -- not descriptions
+# of the customer. "Who needs a motorcycle mechanic" is the Trade; "carburetor"
+# is the narrowing.
+suggestions: [carburetor, "won't start", clutch, "fork seal", "chain and sprocket",
+              stator, "no spark", "grinding noise", tyres, "oil leak"]
+
+# How this trade's customers phrase the request itself. Used to build the
+# Facebook search query: "need a plumber Dallas" finds people who want one,
+# where "water heater Dallas" finds people discussing water heaters.
+ask: ["motorcycle mechanic", "need a motorcycle mechanic", "bike shop recommendation", "motorcycle repair", "anyone work on motorcycles", "mobile motorcycle mechanic", "who works on bikes", "moto mechanic", "need my bike fixed", "motorcycle tune up"]

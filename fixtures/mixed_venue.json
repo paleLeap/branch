@@ -1,0 +1,82 @@
+{
+  "_comment": "Hand-written fixtures. 'expect' is the trade that SHOULD match, or null for junk that must be rejected. Used by tests and the demo CLI. Ages are hours before scan time.",
+  "items": [
+    {"id":"r1","venue":"reddit:r/FortWorth","age_hours":3,"author":"u/dusty_tx",
+     "title":"Bike won't start after sitting all winter",
+     "text":"My '04 Sportster won't turn over at all. Think the carb is gummed up. Anyone know a good shop around north side that won't rob me?",
+     "url":"https://example.invalid/r1","expect":"motorcycle-repair"},
+
+    {"id":"r2","venue":"reddit:r/FortWorth","age_hours":30,"author":"u/mara_k",
+     "title":"Recommendations for a motorcycle mechanic?",
+     "text":"Just moved here. My Ninja 650 is making a grinding noise when I pull the clutch. Who do you use?",
+     "url":"https://example.invalid/r2","expect":"motorcycle-repair"},
+
+    {"id":"m1","venue":"fb-marketplace:76107+25mi","age_hours":8,"author":"Jed R.",
+     "title":"1999 Triumph Bonneville - project",
+     "text":"Doesn't run, needs carb work and new fork seals. $400 obo, no trades.",
+     "url":"https://example.invalid/m1","expect":null,
+     "why":"for-sale listing: must be excluded even though it is full of trade vocabulary"},
+
+    {"id":"r3","venue":"reddit:r/FortWorth","age_hours":5,"author":"u/pipes_up",
+     "title":"Water heater flooding the garage",
+     "text":"Woke up to water everywhere, the heater is leaking from the bottom. Need a plumber today, can anyone help?",
+     "url":"https://example.invalid/r3","expect":"plumbing"},
+
+    {"id":"r4","venue":"reddit:r/FortWorth","age_hours":60,"author":"u/pipes_up",
+     "title":"Toilet backing up into the shower",
+     "text":"Main line is clearly clogged. Roto quoted me $600, is that reasonable? Any recommendations?",
+     "url":"https://example.invalid/r4","expect":"plumbing"},
+
+    {"id":"f1","venue":"forum:dfwriders","age_hours":12,"author":"greasemonkey",
+     "title":"How I fixed my own leaking water heater",
+     "text":"In case it helps someone, I solved it myself with a $12 valve. No plumber needed.",
+     "url":"https://example.invalid/f1","expect":null,
+     "why":"already resolved, and DIY: excluded"},
+
+    {"id":"r5","venue":"reddit:r/smallbusiness","age_hours":20,"author":"u/deli_owner",
+     "title":"Our POS and server keep crashing",
+     "text":"Small business, 12 employees. The network keeps dropping and our backup hasn't run in months. Looking for an IT company, who do you use?",
+     "url":"https://example.invalid/r5","expect":"it-support"},
+
+    {"id":"r6","venue":"reddit:r/smallbusiness","age_hours":100,"author":"u/hr_amy",
+     "title":"Now hiring: sysadmin",
+     "text":"We are looking for someone to manage our server and network. Salary range 70-90k, W2 only.",
+     "url":"https://example.invalid/r6","expect":null,
+     "why":"job post: the classic false positive for IT services"},
+
+    {"id":"r7","venue":"reddit:r/weddingplanning","age_hours":200,"author":"u/june_bride",
+     "title":"Our photographer cancelled 6 weeks out",
+     "text":"We're getting married in October and our photographer fell through. Still looking for someone, any recommendations in the DFW area?",
+     "url":"https://example.invalid/r7","expect":"wedding-photography"},
+
+    {"id":"r8","venue":"reddit:r/weddingplanning","age_hours":50,"author":"u/shutter_sam",
+     "title":"Taking clients for 2027",
+     "text":"Booking now for next season. Here are my packages, DM me for rates. Limited slots for wedding photography.",
+     "url":"https://example.invalid/r8","expect":null,
+     "why":"a competitor advertising, not a client"},
+
+    {"id":"r9","venue":"reddit:r/FortWorth","age_hours":6,"author":"u/happy_rider",
+     "title":"Finally sorted",
+     "text":"Good news, I don't need a mechanic anymore. Already fixed the bike myself, carb was just dirty.",
+     "url":"https://example.invalid/r9","expect":null,
+     "why":"negation + already-fixed: reads as demand to a naive matcher"},
+
+    {"id":"r10","venue":"reddit:r/FortWorth","age_hours":4,"author":"u/dusty_tx",
+     "title":"Bike wont start after sitting all winter",
+     "text":"My 04 Sportster wont turn over at all. Think the carb is gummed up. Anyone know a good shop around north side that wont rob me?",
+     "url":"https://example.invalid/r10","expect":null,
+     "why":"same author, same post reworded without apostrophes: must be deduped against r1, so it must NOT surface as a second lead"},
+
+    {"id":"r11","venue":"reddit:r/FortWorth","age_hours":9,"author":"u/biker_gang_fan",
+     "title":"Great ride today",
+     "text":"Took the long way out to Weatherford. Beautiful weather, no complaints.",
+     "url":"https://example.invalid/r11","expect":null,
+     "why":"on-topic subject, zero intent"},
+
+    {"id":"r12","venue":"reddit:r/homeowners","age_hours":15,"author":"u/newhouse",
+     "title":"Is $600 reasonable?",
+     "text":"Got quoted me six hundred for some work. Not sure if that is fair.",
+     "url":"https://example.invalid/r12","expect":null,
+     "why":"intent language but no subject: must fail the subject stage"}
+  ]
+}

@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.zip
+
+# branch.spec is NOT ignored: it is how the program is built, and it is
+# checked in. PyInstaller's default .gitignore line would drop it.
+.branch/
+
+# Per-user tuning from the results list. Yours, not everyone's.
+profiles/*.local.yaml
