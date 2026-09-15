@@ -17,6 +17,13 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      # A new repository's workflow token is read-only, so attaching the zip to
+      # a release 403s -- "Resource not accessible by integration". The build
+      # itself succeeds, which makes it look like a build failure when it is a
+      # permission one. Write access to contents is only needed for the release
+      # step; everything else runs read-only.
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
