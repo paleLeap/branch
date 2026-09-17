@@ -57,20 +57,31 @@ class TestDuration(unittest.TestCase):
 class TestSessionEnds(unittest.TestCase):
     """A session that cannot end is a schedule, which is the thing we do not do."""
 
-    def test_it_stops_itself_when_the_clock_runs_out(self):
+    @staticmethod
+    def _expired_session() -> Session:
+        """A session whose clock has run out, without waiting for one.
+
+        Sleeping past a short deadline looks deterministic and is not: Windows'
+        monotonic clock ticks about every 15.6ms, so a 60ms sleep can measure as
+        under 50ms and the session is not expired yet. That failed the Windows
+        release build and nothing else -- a real defect in the test, not in the
+        program. Moving the deadline is exact on every platform.
+        """
         s = Session()
-        s.start({"trade_slug": "plumbing"}, 0.05)
-        time.sleep(0.06)
+        s.start({"trade_slug": "plumbing"}, 600.0)
+        s._deadline = time.monotonic() - 1.0
+        return s
+
+    def test_it_stops_itself_when_the_clock_runs_out(self):
+        s = self._expired_session()
         self.assertTrue(s.expired())
         self.assertFalse(s.finished_pass())
         self.assertFalse(s.running)
 
     def test_it_says_why_it_ended(self):
-        s = Session()
+        s = self._expired_session()
         seen = []
         s.ended.connect(seen.append)
-        s.start({"trade_slug": "plumbing"}, 0.05)
-        time.sleep(0.06)
         s.finished_pass()
         self.assertEqual(seen, ["time is up"])
 

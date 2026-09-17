@@ -1066,23 +1066,19 @@ class TestTheClockOnScreen(unittest.TestCase):
         self.w.deleteLater()
 
     def test_a_session_keeps_one_clock_across_passes(self):
-        import time
         self.w.session_started()
         self.w.scan_started()
         first = self.w._session_started_at
-        time.sleep(0.01)
         self.w.scan_started()               # the rescan, and then the next pass
         self.w.scan_started()
         self.assertEqual(self.w._session_started_at, first,
                          "the session clock restarted mid-session")
 
     def test_a_one_off_scan_still_times_itself(self):
-        import time
+        """No sleeping: a short sleep is shorter than Windows can measure."""
+        self.w._started_at = 0.0
         self.w.scan_started()
-        first = self.w._started_at
-        time.sleep(0.01)
-        self.w.scan_started()
-        self.assertGreater(self.w._started_at, first)
+        self.assertGreater(self.w._started_at, 0.0)
 
     def test_the_clock_resets_when_the_session_ends(self):
         self.w.session_started()
