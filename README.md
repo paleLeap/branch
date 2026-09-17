@@ -13,20 +13,35 @@ who to contact. Branch never messages anyone.
 
 ---
 
-## Install
+## Install it — Windows
 
-### Windows
+**You do not need to install anything else. No Python, no accounts, no setup.**
 
 1. Download **`Branch-windows.zip`** from [Releases](../../releases).
-2. Unzip it anywhere. Keep the folder together — `Branch.exe` needs the files beside it.
-3. Double-click **`Branch.exe`**.
+2. Right-click it → **Extract All**. Put the folder wherever you like — Desktop is fine.
+3. Open the folder and read **`START-HERE.txt`**. It walks you through your first scan.
+4. Double-click **`Branch.exe`**.
 
-Windows will say *"Windows protected your PC"* the first time. That warning appears
-for any program without a paid signing certificate, which this does not have. Click
-**More info** → **Run anyway**.
+Windows will say *"Windows protected your PC"* the first time. Click **More info** →
+**Run anyway**. That warning appears for every program that hasn't paid Microsoft for
+a signing certificate, and this one hasn't. Nothing is wrong.
 
-The folder is about 500MB because it contains a browser. That browser is how Branch
-reads Facebook and Craigslist, which are the sources that find the most people.
+**Keep the folder together.** `Branch.exe` needs the files beside it. Don't drag the
+.exe out on its own — make a shortcut to it instead.
+
+The folder is about 500MB because it contains a web browser. That browser is how
+Branch reads Facebook, which is where most of the leads come from.
+
+### Your first scan, in short
+
+Pick your **trade** (start typing — there are 101), check the **city** it filled in,
+set **50 miles** and **Last week**, tick **Reddit** and **Facebook**, and press
+**Go, go, go.** Leave the search box empty the first time.
+
+Facebook needs you to sign in once — click the Facebook button and it offers you the
+page. **Branch never sees your password.**
+
+A scan takes a few minutes and finds a handful of real leads, not hundreds.
 
 ### Mac and Linux
 

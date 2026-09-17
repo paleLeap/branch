@@ -48,6 +48,10 @@ class PhraseHit:
     end: int
     excerpt: str
     negated: bool = False
+    #: For an intent hit: "request" (somebody is asking for the work), "problem"
+    #: (something is wrong) or "price" (shopping the job). The distinction is
+    #: what separates a customer from a review of a competitor.
+    group_kind: str = ""
 
     def __str__(self) -> str:
         flag = " (negated, suppressed)" if self.negated else ""
@@ -66,6 +70,10 @@ class Explanation:
     exclude_hits: list[PhraseHit] = field(default_factory=list)
     narrow_hits: list[PhraseHit] = field(default_factory=list)
     negated_hits: list[PhraseHit] = field(default_factory=list)
+    #: Who is asking, and for what. Kept apart from intent_hits so the card can
+    #: say "asked for it" rather than only showing a score.
+    request_hits: list[PhraseHit] = field(default_factory=list)
+    owned_problem_hits: list[PhraseHit] = field(default_factory=list)
     boosts: dict[str, float] = field(default_factory=dict)
     subject_score: float = 0.0
     intent_score: float = 0.0

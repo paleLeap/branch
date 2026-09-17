@@ -244,7 +244,15 @@ class TestFixtureAccuracy(unittest.TestCase):
         failures: list[str] = []
         for trade, prof in sorted(PROFILES.items()):
             got = {l.item.id for l in scan(items, prof, now=NOW).leads}
-            want = {i.id for i in items if i.extra.get("expect") == trade}
+            # `expect` may name more than one trade: "our photographer fell
+            # through, looking for someone" is a real lead for the wedding
+            # specialist and for a photographer, and calling either one a false
+            # positive would be teaching the engine something untrue.
+            def expects(item) -> bool:
+                wanted = item.extra.get("expect")
+                return trade in (wanted if isinstance(wanted, list) else [wanted])
+
+            want = {i.id for i in items if expects(i)}
             for missed in sorted(want - got):
                 failures.append(f"{trade}: MISSED {missed}")
             for wrong in sorted(got - want):
@@ -386,3 +394,75 @@ class TestAdvertisingExclusions(unittest.TestCase):
         ]:
             with self.subTest(request=request[:40]):
                 self.assertEqual(len(self._leads(request)), 1)
+
+
+class TestSomebodyHasToBeAsking(unittest.TestCase):
+    """The rule the whole program turns on: a lead is a REQUEST, not a mention.
+
+    Every case here is real text from a live scan or a direct variation of one.
+    """
+
+    def setUp(self):
+        self.profile = PROFILES["plumbing"]
+
+    def _scan(self, text: str):
+        got = scan([item(text, venue="facebook")], self.profile, now=NOW)
+        return got.leads, got.discarded
+
+    def test_an_explicit_request_is_a_lead(self):
+        leads, _ = self._scan("Anyone know a good plumber? Leak under my kitchen sink.")
+        self.assertEqual(len(leads), 1)
+
+    def test_your_own_problem_is_a_lead_without_asking(self):
+        """Nobody writes "I need a plumber" when the garage is filling up."""
+        leads, _ = self._scan("My water heater is leaking all over the garage floor.")
+        self.assertEqual(len(leads), 1)
+
+    def test_a_five_star_review_is_not_a_lead(self):
+        """Live Dallas scan, 2026-09-16: this was returned as a lead. It matched
+        "leak*" and it says "my home", so neither the trade words nor a
+        first-person test anywhere in the post can tell it from a customer."""
+        leads, discarded = self._scan(
+            "Best plumber around! Excellent service, they did a wonderful job "
+            "fixing a leak outside of my home. Would highly recommend them.")
+        self.assertEqual(leads, [])
+        self.assertEqual(discarded[0].stage, "request")
+
+    def test_a_plumber_advertising_is_not_a_lead(self):
+        """Also live: a plumbing company's own post scored 9.9 on trade words."""
+        leads, _ = self._scan(
+            "Ever wonder what is actually behind your shower handle? Most "
+            "homeowners only see the trim. We see the pipe, the valve and the "
+            "leak behind it.")
+        self.assertEqual(leads, [])
+
+    def test_a_solved_problem_is_not_a_lead(self):
+        leads, _ = self._scan("I do not need a plumber anymore, got the leak fixed.")
+        self.assertEqual(leads, [])
+
+    def test_an_impersonal_request_is_still_a_lead(self):
+        """Live Dallas scan: a real customer, written with no "I" anywhere. The
+        request gate must not require first person -- asking is enough."""
+        leads, _ = self._scan("House at Dallas 75287, the water heater at attic "
+                              "is leaking, needs to fix now, please help")
+        self.assertEqual(len(leads), 1)
+
+    def test_ownership_is_read_close_to_the_problem_not_anywhere(self):
+        from branch.engine import OWNERSHIP_AFTER, OWNERSHIP_BEFORE
+        self.assertGreater(OWNERSHIP_BEFORE, OWNERSHIP_AFTER,
+                           "'fixing a leak at my home' is a review; "
+                           "'flooded my basement' is a customer")
+
+    def test_the_explanation_says_who_asked(self):
+        leads, _ = self._scan("Anyone know a good plumber? My sink is backed up.")
+        self.assertTrue(leads[0].explanation.request_hits,
+                        "a lead must be able to show the words that asked")
+
+    def test_asking_language_is_shared_by_every_trade(self):
+        """A profile says what its trade is; _defaults says what asking is."""
+        for slug, profile in PROFILES.items():
+            with self.subTest(trade=slug):
+                requests = [g for g in profile.intent if g.kind == "request"]
+                self.assertTrue(requests, f"{slug} has no way to notice a request")
+                terms = {t for g in requests for t in g.terms}
+                self.assertIn("please help", terms)

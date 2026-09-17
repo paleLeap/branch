@@ -1,0 +1,86 @@
+BRANCH — START HERE
+===================
+
+Branch finds people near you who need what you do, and hands you a
+link to what they wrote. You decide who to contact. Branch never
+messages anybody, ever.
+
+
+TO START IT
+-----------
+
+Double-click  Branch.exe  in this folder.
+
+The first time, Windows may say "Windows protected your PC".
+Click  More info  ->  Run anyway.
+That warning shows up for any program that hasn't paid Microsoft for a
+certificate. Nothing is wrong.
+
+Keep this whole folder together. Branch.exe needs the files next to it.
+
+
+YOUR FIRST SCAN — do exactly this
+---------------------------------
+
+1. TRADE      Click the Trade box and start typing your work.
+              "plumb" finds Plumbing, "handy" finds Handyman.
+              There are 101 to choose from.
+
+2. LOCATION   It fills in your nearest city by itself. Change it if
+              you work somewhere else.
+
+3. HOW FAR    50 miles is a good start.
+
+4. HOW RECENT "Last week" is a good start.
+
+5. SOURCES    Tick  Reddit  and  Facebook.
+              Leave the search box EMPTY the first time. Your trade
+              already knows what its customers say.
+
+6. FACEBOOK   Click the Facebook button. It will tell you it needs an
+              account and offer you a sign-in page. Sign in there, in
+              Branch's own window.
+              Branch NEVER sees your password. Use a spare account if
+              you would rather.
+
+7. GO         Press  Go, go, go.
+
+
+WHAT TO EXPECT
+--------------
+
+A scan takes a few minutes. Facebook is slow on purpose — it reads at
+a human pace so nobody's account gets flagged.
+
+The dot at the top pulses while it works. If the dot stops moving,
+something is stuck; close it and start again.
+
+You should get a handful of real leads, not hundreds. One to five good
+ones is a normal scan. This finds work you would never have seen — it
+is not a firehose.
+
+Each result shows what the person wrote, where, how long ago, and WHY
+it matched. Click a result to open the original post in your browser.
+
+Nothing matched? Widen the miles, go back further, or check the
+"Discarded" tab to see what was thrown out and why.
+
+
+IF IT KEEPS FINDING NOTHING
+---------------------------
+
+- Make sure Facebook is ticked AND you signed in (step 6).
+- Try Plumbing or Handyman — those two find the most.
+- Try a bigger city nearby.
+
+
+YOUR PRIVACY, AND THEIRS
+------------------------
+
+No account with us. No server. Nothing is sent anywhere.
+Results live on your screen and are gone when you close it.
+Branch keeps your settings and which sites you signed into —
+never a password, and never a file about anyone whose post it read.
+
+
+Full instructions: README.md, in this folder.

@@ -1,8 +1,10 @@
 """Custom widgets: the frameless window's own controls."""
 from __future__ import annotations
 
-from PySide6.QtCore import Property, QEasingCurve, QPropertyAnimation, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import (
+    Property, QEasingCurve, QPointF, QPropertyAnimation, QSize, QTimer, Qt, Signal,
+)
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen
 from PySide6.QtCore import QStringListModel, Signal
 from PySide6.QtWidgets import (
     QCompleter, QComboBox, QLineEdit, QListWidget, QPushButton, QWidget,
@@ -98,7 +100,22 @@ class WindowButton(QWidget):
 
 
 class SourceToggle(QPushButton):
-    """One platform to search. Checkable."""
+    """One platform to search, with a mark saying whether it can be.
+
+    The mark answers "why is nothing happening when I tick this?" before it is
+    asked, and it answers it at a glance across the whole grid:
+
+        tick  this works right now
+        !     this needs an account before it can do anything
+        ?     this cannot run; click to find out what it is and why
+
+    Painted rather than added to the label. Put in the text it would shift each
+    name off its own left edge by a different amount and the column would stop
+    reading as a column -- the same reason the combo chevron is painted.
+    """
+
+    #: The three states a source can be in, as the window shows them.
+    READY, NEEDS_ACCOUNT, UNAVAILABLE = "ready", "login", "unavailable"
 
     def __init__(self, label: str, parent=None) -> None:
         super().__init__(label, parent)
@@ -106,6 +123,121 @@ class SourceToggle(QPushButton):
         self.setCheckable(True)
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.StrongFocus)
+        self._state = self.READY
+        self._t: Theme | None = None
+
+    def set_state(self, state: str, theme: "Theme | None" = None) -> None:
+        if theme is not None:
+            self._t = theme
+        self._state = state
+        self.update()
+
+    @property
+    def state(self) -> str:
+        return self._state
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        theme, mark = self._t, self._mark()
+        if theme is None or not mark:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        colour = QColor(theme.accent_hi if self._state == self.READY
+                        else theme.foreground_dim)
+        # The tick is the quiet one: it says "nothing to do here". The other two
+        # are asking for attention and sit at full strength.
+        colour.setAlphaF(0.75 if self._state == self.READY else 1.0)
+        painter.setPen(colour)
+        font = painter.font()
+        # The theme sizes fonts in PIXELS, so pointSizeF() is -1 here and
+        # scaling it produces a negative size Qt refuses. Scale whichever one
+        # this font actually uses.
+        scale = 0.88 if mark == "\u2713" else 1.0
+        if font.pixelSize() > 0:
+            font.setPixelSize(max(6, round(font.pixelSize() * scale)))
+        elif font.pointSizeF() > 0:
+            font.setPointSizeF(max(6.0, font.pointSizeF() * scale))
+        font.setBold(mark != "\u2713")
+        painter.setFont(font)
+        inset = theme.s(6)
+        painter.drawText(self.rect().adjusted(0, 0, -inset, 0),
+                         Qt.AlignRight | Qt.AlignVCenter, mark)
+        painter.end()
+
+    def _mark(self) -> str:
+        return {self.READY: "\u2713",          # tick
+                self.NEEDS_ACCOUNT: "!",
+                self.UNAVAILABLE: "?"}.get(self._state, "")
+
+
+class ActivityDot(QWidget):
+    """Proof that the program is alive, next to what it is doing.
+
+    A scan takes anywhere from a few seconds to two minutes -- measured on a
+    clean install: 115 seconds, most of it Reddit rate-limit backoff. For all of
+    that the button said "Searching..." and nothing else, and **a working scan
+    looked exactly like a hung one**. He could not tell whether to wait or
+    restart it, which is the complaint this answers.
+
+    Static text cannot answer it, because a frozen app shows static text too.
+    Only motion proves the program is still running -- and because the animation
+    is driven by Qt's event loop, it stops the moment the UI thread blocks. That
+    is the point: if the dot is moving, the window is alive. Scanning happens on
+    a worker thread, so during a real scan it keeps moving.
+
+    Three dots filling and fading in turn. No spinner, no progress bar: a bar
+    would have to claim a percentage, and a scan cannot know one -- how many
+    posts a source will return is not knowable until it has returned them.
+    """
+
+    def __init__(self, theme: Theme, parent=None) -> None:
+        super().__init__(parent)
+        self._t = theme
+        self._phase = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(90)
+        self._timer.timeout.connect(self._step)
+        side = theme.s(Size.query_h)
+        self.setFixedSize(QSize(theme.s(26), side))
+        self.hide()
+
+    def start(self) -> None:
+        self._phase = 0.0
+        self.show()
+        self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+        self.hide()
+
+    @property
+    def running(self) -> bool:
+        return self._timer.isActive()
+
+    def _step(self) -> None:
+        self._phase = (self._phase + 0.18) % 3.0
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        radius = max(1.0, self._t.s(2.0))
+        gap = self._t.s(7)
+        total = gap * 2
+        x = (self.width() - total) / 2.0
+        y = self.height() / 2.0
+        for i in range(3):
+            # Distance from the travelling phase, wrapped, so the pulse runs
+            # round rather than bouncing.
+            offset = abs(((self._phase - i + 1.5) % 3.0) - 1.5)
+            strength = max(0.0, 1.0 - offset / 1.5)
+            colour = QColor(self._t.accent_hi)
+            colour.setAlphaF(0.22 + 0.78 * strength)
+            painter.setBrush(QBrush(colour))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(QPointF(x + i * gap, y), radius, radius)
+        painter.end()
 
 
 class HouseComboBox(QComboBox):

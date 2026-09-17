@@ -206,7 +206,10 @@ def stylesheet(t: Theme) -> str:
         background: {tray};
         border: none;
         border-radius: {radius}px;
-        padding: 0px {s(7)}px;
+        /* Asymmetric on purpose: the extra right padding is the lane the
+           status mark is painted into. Without it a long label such as
+           "Craigslist" runs straight through the tick. */
+        padding: 0px {s(17)}px 0px {s(8)}px;
         color: {dim};
     }}
     QPushButton#source:hover {{ background: {tray_hover}; color: {fg}; }}

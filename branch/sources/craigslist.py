@@ -150,6 +150,8 @@ class Craigslist(_Interactive):
 
     key = "craigslist"
     label = "Craigslist"
+    description = ("Craigslist gigs in your area -- people posting one-off jobs they need "
+                   "doing. Read in Branch's browser; no account needed.")
     geographic = True          # a real area, picked from coordinates
     login_service = ""         # craigslist serves everyone; nothing to sign in to
     login_url = ""

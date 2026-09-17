@@ -19,6 +19,7 @@ surface only.
 from __future__ import annotations
 
 import threading
+import time
 
 from PySide6.QtCore import (
     QEasingCurve, QObject, QPoint, QPropertyAnimation, QTimer, Qt, Signal,
@@ -27,16 +28,17 @@ from PySide6.QtGui import (
     QBrush, QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen,
 )
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QFrame, QGraphicsOpacityEffect, QGridLayout,
+    QApplication, QComboBox, QDialog, QFrame, QGraphicsOpacityEffect, QGridLayout,
     QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from .. import locate
 from .results import ResultsView
+from ..runner import RUN_FOR_SECONDS
 from .theme import Size, Theme, rgba, stylesheet
 from .widgets import (
-    HouseComboBox, LocationEdit, PromptList, QueryEdit, SearchableCombo, SourceToggle,
-    WindowButton,
+    ActivityDot, HouseComboBox, LocationEdit, PromptList, QueryEdit, SearchableCombo,
+    SourceToggle, WindowButton,
 )
 
 # The four refine controls, in reading order: where, what, how wide, how recent.
@@ -62,7 +64,6 @@ SOURCES: list[tuple[str, str]] = [
     ("groups", "FB Groups"),
     ("x", "X / Twitter"),
     ("feeds", "My feeds"),
-    ("reviews", "Reviews"),
 ]
 
 class PositionProbe(QObject):
@@ -88,6 +89,11 @@ class MainWindow(QWidget):
     scan_requested = Signal(dict)
     exclusion_requested = Signal(str)
     browser_harvested = Signal(list)
+    #: The Go button pressed while a session is running -- "that is enough".
+    stop_requested = Signal()
+    #: Every source that needed the browser has now been read. A pass is not
+    #: over until this fires, however many sources were ticked.
+    browsing_finished = Signal()
     #: (service, url) -- the user pressed "Sign in to Facebook". The app opens
     #: Branch's own browser on that page; Branch never sees what is typed there.
     login_requested = Signal(str, str)
@@ -108,6 +114,10 @@ class MainWindow(QWidget):
         self._resize_edges = Qt.Edges()
         self._combos: dict[str, QComboBox] = {}
         self._sources: dict[str, SourceToggle] = {}
+        # True while a continuous session is running, which is what turns the Go
+        # button into a Stop button and keeps it live between passes.
+        self._session_running = False
+        self._session_started_at = 0.0
         # key -> SourceState, so current_query() can refuse to send a source
         # that cannot run even if something ticked it programmatically.
         self._source_states: dict = {}
@@ -180,9 +190,39 @@ class MainWindow(QWidget):
         self.go.setCursor(Qt.PointingHandCursor)
         self.go.setFlat(True)
         self.go.setFixedHeight(t.s(Size.query_h))
-        self.go.clicked.connect(self._emit_scan)
+        self.go.clicked.connect(self._go_pressed)
         row.addWidget(self.go, 0)          # directly to the right of the query
+
+        # How long to keep going. It sits by the button that starts it, not in
+        # the refine grid: it is not a property of the search, it is how long
+        # the user intends to sit here. "Once" is the default and is exactly
+        # what Go has always done.
+        self.run_for = HouseComboBox(t)
+        self.run_for.addItems(list(RUN_FOR_SECONDS))
+        self.run_for.setCurrentIndex(0)                  # Once
+        self.run_for.setFixedHeight(t.s(Size.query_h))
+        self.run_for.setToolTip(
+            "How long to keep asking. Branch runs a pass, then another, until "
+            "this runs out -- while you watch. It never runs on its own.")
+        row.addWidget(self.run_for, 0)
+
+        # Proof of life, and what it is doing. Both idle until a scan starts:
+        # an indicator that is always there says nothing.
+        self.activity = ActivityDot(t, self)
+        row.addWidget(self.activity, 0)
+        self.status = QLabel("")
+        self.status.setObjectName("note")
+        row.addWidget(self.status, 0)
         row.addStretch(1)
+
+        # Ticks the elapsed clock while a scan runs. A scan can take two
+        # minutes, and "how long has this been going?" is most of what the user
+        # wants to know when deciding whether to keep waiting.
+        self._elapsed = QTimer(self)
+        self._elapsed.setInterval(1000)
+        self._elapsed.timeout.connect(self._tick_elapsed)
+        self._started_at = 0.0
+        self._status_text = ""
 
         # The minimise and close glyphs are NOT in the layout. They belong in the
         # true top-right corner of the window, and a layout would inset them by
@@ -325,6 +365,7 @@ class MainWindow(QWidget):
             # both are local by construction -- so they are the two that are on
             # before the user touches anything.
             btn.setChecked(key in ("reddit", "craigslist"))
+            btn.set_state(SourceToggle.READY, t)
             btn.clicked.connect(lambda _=False, k=key: self._source_clicked(k))
             self._sources[key] = btn
 
@@ -374,7 +415,20 @@ class MainWindow(QWidget):
         state = self._source_states.get(key)
         btn = self._sources.get(key)
         if state is None or state.selectable and state.state == "ready":
-            return                              # an ordinary toggle; let it be
+            # Free sources are an ordinary toggle; let them be. A metered one
+            # says what it costs at the moment it is ticked -- before Go, which
+            # is the only point where saying it can still change the decision.
+            if state is not None and btn is not None and btn.isChecked():
+                # What this source is about to do, said before Go rather than
+                # explained afterwards: what it costs, or which of two routes it
+                # is going to take.
+                note = state.note or (
+                    f"{state.label}: about ${state.cost:.2f} a scan, billed to "
+                    f"your own key" if state.cost else "")
+                if note:
+                    self.status.setText(note)
+                    self.status.adjustSize()
+            return
         if btn is not None:
             btn.setChecked(False)               # it cannot be scanned yet
         self._show_source_notice(state)
@@ -382,14 +436,25 @@ class MainWindow(QWidget):
     def _show_source_notice(self, state) -> None:
         from .notice import LOGIN_MESSAGE, SourceNotice, open_externally
         gated = state.state == "login"
+        # What it is, then why it cannot run. "not built yet" answers the second
+        # question and not the first, and the first is the one a person clicking
+        # a "?" is actually asking.
+        body = LOGIN_MESSAGE if gated else state.reason
+        if state.description:
+            body = f"{state.description}\n\n{body}" if body else state.description
         dialog = SourceNotice(
             self.theme,
             title=state.label,
-            message=LOGIN_MESSAGE if gated else state.reason,
+            message=body,
             link=state.login_url if gated else "",
             link_label=f"Open {state.service} sign-in" if gated else "",
             parent=self)
-        if dialog.exec() != dialog.Accepted or not dialog.link:
+        # QDialog.DialogCode.Accepted, spelled in full. `dialog.Accepted` does
+        # not exist on a PySide6 instance -- it raised AttributeError here, the
+        # exception was swallowed by the Qt slot, and the sign-in button did
+        # nothing at all with no visible error. The tests mocked this method
+        # out, so nothing caught it; there is a click-through test now.
+        if dialog.exec() != int(QDialog.DialogCode.Accepted) or not dialog.link:
             return
         if gated:
             # Branch's own browser, not the system one: the session a scan uses
@@ -476,28 +541,70 @@ class MainWindow(QWidget):
             # reporting nothing is exactly the silent failure this avoids.
             "sources": [k for k, b in self._sources.items()
                         if b.isChecked() and self._can_run(k)],
+            "run_for": self.run_for.currentText().strip(),
         }
 
     def _can_run(self, key: str) -> bool:
         state = self._source_states.get(key)
         return True if state is None else state.selectable
 
+    def _go_pressed(self) -> None:
+        """Go starts a run; the same button stops one that is still going.
+
+        A session the user cannot stop with the control they started it with is
+        not attended, whatever the countdown says.
+        """
+        if self._session_running:
+            self.stop_requested.emit()
+            return
+        self._emit_scan()
+
     def _emit_scan(self) -> None:
         self._prompt_list.hide()
         self.scan_requested.emit(self.current_query())
 
+    def session_started(self) -> None:
+        """A continuous session is in flight: Go becomes Stop and stays live."""
+        self._session_running = True
+        # One clock for the whole session. scan_started() resets the elapsed
+        # time on every runner.run(), and a single pass runs twice -- once for
+        # the threaded sources and again when the browser's posts are folded in
+        # -- so the number on screen kept dropping back to zero and told the
+        # user nothing about how long anything had been going.
+        self._session_started_at = time.monotonic()
+        self.go.setText("Stop")
+        self.go.setEnabled(True)
+
+    def session_ended(self, why: str = "") -> None:
+        self._session_running = False
+        self._session_started_at = 0.0
+        self.go.setText("Go, go, go.")
+        self.go.setEnabled(True)
+
     def browse(self, targets: list[tuple[str, str, str]]) -> None:
-        """Open the harvest browser for sources that need a logged-in session.
+        """Work through every source that needs the browser, one at a time.
+
+        ONE AT A TIME, and all of them. This used to start the first target,
+        keep the rest in `_pending_browse` and never look at that list again --
+        so ticking Craigslist, Marketplace, Facebook and FB Groups ran
+        **Craigslist only**, and the other three were silently skipped. It looked
+        exactly like a working scan that found nothing, which is the failure this
+        program exists to refuse: a scan that did not search must say so.
 
         Deferred import: QtWebEngine pulls in a large chunk of Chromium, and a
         user who never ticks Facebook should never pay for loading it.
         """
-        if not targets:
+        self._pending_browse = list(targets)
+        self._browse_next()
+
+    def _browse_next(self) -> None:
+        """Start the next source in the queue, or say browsing is finished."""
+        if not self._pending_browse:
+            self.browsing_finished.emit()
             return
+        key, url, label = self._pending_browse.pop(0)
         self._browser_window()
         self._browser.resize(self.theme.s(1400), self.theme.s(1000))
-        key, url, label = targets[0]
-        self._pending_browse = targets[1:]
         # A source may offer several searches; one returns about four results and
         # then stops growing, so depth comes from asking more than one question.
         queue = list(getattr(self, "_browse_queue", {}).get(key) or [])
@@ -521,6 +628,8 @@ class MainWindow(QWidget):
         if getattr(self, "_browser", None) is None:
             self._browser = HarvestBrowser(self.theme, self)
             self._browser.harvested.connect(self.browser_harvested)
+            # One source done; start the next one the user ticked.
+            self._browser.harvested.connect(lambda _items: self._browse_next())
             # The browser is hidden, so its progress has to show up here instead.
             self._browser.progress.connect(self._browsing_progress)
             self._browser.signed_in.connect(self._record_sign_in)
@@ -539,20 +648,62 @@ class MainWindow(QWidget):
         self._browse_queue = dict(queue)
 
     def _browsing_progress(self, message: str) -> None:
-        count = "".join(ch for ch in message.split(" ")[1:2][0] if ch.isdigit()) \
-            if message.startswith("Read ") else ""
-        self.go.setText(f"Searching... {count}" if count else "Searching...")
+        """The browser reports through the same status line as the runner, so
+        there is one place to look rather than two."""
+        if not self.activity.running:
+            self.activity.start()
+            self._elapsed.start()
+        self.scan_progress(message.rstrip("."))
 
     def scan_started(self) -> None:
         """A scan is in flight. It runs on a worker thread, so the window stays
-        live -- this only says so."""
-        self.go.setText("Searching...")
+        live -- and the moving dot is how the user can tell."""
+        self.go.setText("Searching")
         self.go.setEnabled(False)
+        if not self._session_running:
+            self._started_at = time.monotonic()
+        self._status_text = "starting"
+        self.activity.start()
+        self._elapsed.start()
+        self._tick_elapsed()
+
+    def scan_progress(self, message: str) -> None:
+        """What the scan is doing now. Emitted per source by the runner and by
+        the browser, so the two report through one line."""
+        self._status_text = message
+        self._tick_elapsed()
+
+    def _tick_elapsed(self) -> None:
+        if not self.activity.running:
+            return
+        since = (self._session_started_at if self._session_running
+                 else self._started_at)
+        seconds = int(time.monotonic() - since)
+        clock = f"{seconds // 60}:{seconds % 60:02d}" if seconds >= 60 else f"{seconds}s"
+        self.status.setText(f"{self._status_text}  ·  {clock}".strip(" ·"))
+        self.status.adjustSize()
+
+    def scan_stopped(self, message: str = "") -> None:
+        self.activity.stop()
+        self._elapsed.stop()
+        self.status.setText(message)
+        self.status.adjustSize()
+        # Between two passes of a session the run is not over, so the button
+        # must stay Stop. Putting "Go, go, go." back here would leave the user
+        # with no way to stop the thing that is still going.
+        if self._session_running:
+            self.go.setText("Stop")
+        else:
+            self.go.setText("Go, go, go.")
+        self.go.setEnabled(True)
 
     def show_result(self, result) -> None:
         """Display a finished scan, growing the window to make room."""
-        self.go.setText("Go, go, go.")
-        self.go.setEnabled(True)
+        leads = len(getattr(result, "leads", []) or [])
+        seconds = int(time.monotonic() - self._started_at) if self._started_at else 0
+        self.scan_stopped(
+            f"{leads} lead{'' if leads == 1 else 's'} in {seconds}s"
+            if seconds else f"{leads} lead{'' if leads == 1 else 's'}")
         if not self.results.isVisible():
             self._collapsed_height = self.height()
             self.results.show()
@@ -604,6 +755,7 @@ class MainWindow(QWidget):
                 btn.setToolTip("")
                 continue
             btn.setToolTip(state.reason)
+            btn.set_state(state.state, self.theme)
             if state.state != "ready":
                 btn.setChecked(False)
         self._pin_sources_height()

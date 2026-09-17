@@ -52,6 +52,32 @@ class TestWindow(unittest.TestCase):
         self.assertEqual(len(REFINE_FIELDS), 4)
         self.assertEqual(REFINE_FIELDS[0][0], "location")
 
+    def test_a_metered_source_would_say_what_it_costs_when_ticked(self):
+        """Nothing is metered today. cost_per_scan has been in the adapter
+        contract from the start, promising "shown before a scan runs", and no
+        part of the window read it until a paid source briefly existed. This
+        keeps that path alive so the next one cannot arrive silently."""
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        from branch.sources.base import SourceState
+        runner = ScanRunner(ROOT, Profile.load_all(ROOT / "profiles"))
+        self.w.set_source_states(runner.source_states())
+        self.w._source_states["reddit"] = SourceState(
+            "reddit", "Reddit", "ready", cost=0.25)
+        self.w._sources["reddit"].setChecked(True)
+        self.w._source_clicked("reddit")
+        self.assertIn("$0.25", self.w.status.text())
+
+    def test_a_free_source_says_nothing_about_money(self):
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        runner = ScanRunner(ROOT, Profile.load_all(ROOT / "profiles"))
+        self.w.set_source_states(runner.source_states())
+        self.w.status.setText("")
+        self.w._sources["reddit"].setChecked(True)
+        self.w._source_clicked("reddit")
+        self.assertEqual(self.w.status.text(), "")
+
     def test_location_is_a_text_field_not_a_dropdown(self):
         """20,000 towns will not fit in a list."""
         from branch.ui.widgets import LocationEdit
@@ -512,7 +538,7 @@ class TestSourceGrid(unittest.TestCase):
             self.assertNotIn(banned, texts, f"{banned!r} is still in the panel")
 
     def test_the_reason_is_still_reachable_on_hover(self):
-        self.assertIn("Google Places", self.w._sources["reviews"].toolTip())
+        self.assertIn("feed URL", self.w._sources["feeds"].toolTip())
         self.assertIn("sign in", self.w._sources["facebook"].toolTip().lower())
 
     def test_clicking_a_gated_source_unticks_it_and_explains(self):
@@ -526,8 +552,8 @@ class TestSourceGrid(unittest.TestCase):
     def test_clicking_an_unavailable_source_explains_too(self):
         shown = []
         self.w._show_source_notice = shown.append
-        self.w._source_clicked("reviews")
-        self.assertEqual([s.key for s in shown], ["reviews"])
+        self.w._source_clicked("feeds")
+        self.assertEqual([s.key for s in shown], ["feeds"])
 
     def test_clicking_a_working_source_just_toggles_it(self):
         shown = []
@@ -543,8 +569,8 @@ class TestSourceGrid(unittest.TestCase):
         self.assertNotIn("facebook", self.w.current_query()["sources"])
 
     def test_an_unavailable_source_is_never_scanned(self):
-        self.w._sources["reviews"].setChecked(True)
-        self.assertNotIn("reviews", self.w.current_query()["sources"])
+        self.w._sources["feeds"].setChecked(True)
+        self.assertNotIn("feeds", self.w.current_query()["sources"])
 
     def test_signing_in_makes_the_source_an_ordinary_toggle(self):
         from branch.sources.registry import build
@@ -675,3 +701,391 @@ class TestSourceGridDoesNotOverlap(unittest.TestCase):
                                         f"{key} is drawn outside the source column")
         finally:
             window.deleteLater()
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestSignInActuallyOpens(unittest.TestCase):
+    """He clicked "Open Facebook sign-in" and nothing happened.
+
+    `dialog.Accepted` does not exist on a PySide6 QDialog instance -- it is
+    `QDialog.DialogCode.Accepted`. The AttributeError was raised inside a Qt
+    slot, which swallows it, so the button silently did nothing.
+
+    The reason no test caught it: every test of this path replaced
+    `_show_source_notice` with a stub, so the dialog was never built and its
+    button was never pressed. These press the real button.
+    """
+
+    app: "QApplication"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        from branch.sources.registry import build
+        self.w = MainWindow(trades=["plumbing"])
+        self.w.set_source_states({k: s.state(set()) for k, s in build().items()})
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def _press(self, key: str, button_text: str) -> list:
+        """Open the real notice for `key` and press the named button."""
+        from PySide6.QtWidgets import QPushButton
+        asked = []
+        self.w.login_requested.connect(lambda s, u: asked.append((s, u)))
+        made = {}
+        real = self.w._show_source_notice
+
+        def capture(state):
+            from branch.ui import notice as notice_module
+            original = notice_module.SourceNotice
+
+            class Capturing(original):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    made["dialog"] = self
+
+                def exec(self):
+                    target = next((b for b in self.findChildren(QPushButton)
+                                   if button_text in b.text()), None)
+                    if target is None:
+                        return 0
+                    target.click()
+                    return self.result()
+
+            notice_module.SourceNotice = Capturing
+            try:
+                real(state)
+            finally:
+                notice_module.SourceNotice = original
+
+        self.w._show_source_notice = capture
+        self.w._source_clicked(key)
+        return asked
+
+    def test_the_sign_in_button_asks_to_open_the_page(self):
+        asked = self._press("facebook", "Open")
+        self.assertEqual(len(asked), 1,
+                         "the sign-in button did nothing -- the original bug")
+        service, url = asked[0]
+        self.assertEqual(service, "Facebook")
+        self.assertTrue(url.startswith("https://www.facebook.com/"))
+
+    def test_x_offers_its_own_page_not_facebooks(self):
+        asked = self._press("x", "Open")
+        self.assertEqual(len(asked), 1)
+        service, url = asked[0]
+        self.assertEqual(service, "X")
+        self.assertIn("x.com", url)
+
+    def test_closing_the_notice_opens_nothing(self):
+        self.assertEqual(self._press("facebook", "Close"), [])
+
+    def test_a_source_with_no_fix_has_no_button_to_press(self):
+        """My feeds needs a file the user writes; there is no page to open."""
+        self.assertEqual(self._press("feeds", "Open"), [])
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestStatusMarks(unittest.TestCase):
+    """A mark per pill: tick works, ! needs an account, ? cannot run.
+
+    It answers "why is nothing happening when I tick this?" at a glance, across
+    the whole grid, before the question is asked.
+    """
+
+    app: "QApplication"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        from branch.sources.registry import build
+        self.w = MainWindow(trades=["plumbing"])
+        self.w.set_source_states({k: s.state(set()) for k, s in build().items()})
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_the_mark_matches_what_the_source_can_do(self):
+        from branch.ui.widgets import SourceToggle
+        expected = {
+            "reddit": SourceToggle.READY, "craigslist": SourceToggle.READY,
+            "marketplace": SourceToggle.READY, "forums": SourceToggle.READY,
+            "facebook": SourceToggle.NEEDS_ACCOUNT,
+            "groups": SourceToggle.NEEDS_ACCOUNT,
+            "x": SourceToggle.NEEDS_ACCOUNT,
+            "feeds": SourceToggle.UNAVAILABLE,
+        }
+        for key, state in expected.items():
+            with self.subTest(source=key):
+                self.assertEqual(self.w._sources[key].state, state)
+
+    def test_all_three_marks_are_distinct_and_present(self):
+        marks = {self.w._sources[k]._mark() for k in ("reddit", "facebook", "feeds")}
+        self.assertEqual(len(marks), 3, "two states share a mark")
+        self.assertEqual(marks, {"✓", "!", "?"})
+
+    def test_signing_in_turns_the_bang_into_a_tick(self):
+        from branch.sources.registry import build
+        from branch.ui.widgets import SourceToggle
+        self.w.set_source_states({k: s.state({"facebook"}) for k, s in build().items()})
+        self.assertEqual(self.w._sources["facebook"].state, SourceToggle.READY)
+        self.assertEqual(self.w._sources["x"].state, SourceToggle.NEEDS_ACCOUNT)
+
+    def test_a_fresh_window_marks_its_pills_before_any_state_arrives(self):
+        fresh = MainWindow(trades=["plumbing"])
+        try:
+            for key, _ in SOURCES:
+                self.assertTrue(fresh._sources[key]._mark(),
+                                f"{key} has no mark at all")
+        finally:
+            fresh.deleteLater()
+
+    def test_the_label_never_runs_into_the_mark(self):
+        """The longest label at the largest scale is the case that collides."""
+        from branch.ui.theme import Theme
+        from PySide6.QtGui import QFontMetrics
+        for scale in (1.0, 2.0, 3.0):
+            with self.subTest(ui_scale=scale):
+                theme = Theme.load()
+                theme.values["ui_scale"] = scale
+                window = MainWindow(trades=["plumbing"], theme=theme)
+                window.show()
+                self.app.processEvents()
+                try:
+                    for key, label in SOURCES:
+                        btn = window._sources[key]
+                        text = QFontMetrics(btn.font()).horizontalAdvance(label)
+                        # padding-right is the lane the mark is painted into
+                        self.assertLess(text + theme.s(17) + theme.s(8),
+                                        btn.width() + theme.s(4),
+                                        f"{label!r} overruns its pill at {scale}")
+                finally:
+                    window.deleteLater()
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestSourceDescriptions(unittest.TestCase):
+    """A "?" asks two questions: what is this, and why can't I use it."""
+
+    def test_every_source_says_what_it_is(self):
+        from branch.sources.registry import build
+        for key, source in build().items():
+            with self.subTest(source=key):
+                description = source.state(set()).description
+                self.assertTrue(description, f"{key} has no description")
+                self.assertGreater(len(description), 30, f"{key}'s is too thin")
+
+    def test_the_notice_leads_with_what_it_is_then_why_it_is_off(self):
+        from branch.sources.registry import build
+        state = build()["feeds"].state(set())
+        self.assertTrue(state.description, "a source must say what it is")
+        self.assertIn("feed", state.reason)
+
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestScanActivity(unittest.TestCase):
+    """"I start a query and don't know if it's failed or still processing."
+
+    A scan takes anywhere from seconds to two minutes -- measured on a clean
+    install: 115 seconds, most of it rate-limit backoff -- and the window used
+    to say "Searching..." for all of it. A working scan looked exactly like a
+    hung one.
+    """
+
+    app: "QApplication"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.w = MainWindow(trades=["plumbing"])
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_nothing_is_shown_before_a_scan_starts(self):
+        """An indicator that is always there says nothing."""
+        self.assertFalse(self.w.activity.running)
+        self.assertFalse(self.w.activity.isVisibleTo(self.w))
+        self.assertEqual(self.w.status.text(), "")
+
+    def test_starting_a_scan_starts_the_indicator(self):
+        self.w.scan_started()
+        self.assertTrue(self.w.activity.running)
+        self.assertFalse(self.w.go.isEnabled())
+
+    def test_the_indicator_actually_moves(self):
+        """Static text cannot prove liveness -- a frozen app shows static text
+        too. Only motion can, so assert the pixels change."""
+        import hashlib
+        self.w.show()
+        self.w.scan_started()
+        self.app.processEvents()
+        frames = set()
+        for _ in range(6):
+            self.w.activity._step()
+            self.app.processEvents()
+            image = self.w.activity.grab().toImage()
+            frames.add(hashlib.md5(bytes(image.constBits())).hexdigest())
+        self.assertGreater(len(frames), 3, "the indicator is not animating")
+
+    def test_it_is_driven_by_the_event_loop_so_a_hung_window_stops_it(self):
+        """The property that makes it proof rather than decoration: the
+        animation is a QTimer on the UI thread. If that thread blocks, the dot
+        freezes. Scanning happens on a worker thread, so a real scan keeps it
+        moving -- and a dot that has stopped means something is actually wrong."""
+        from PySide6.QtCore import QTimer
+        self.assertIsInstance(self.w.activity._timer, QTimer)
+        self.assertIs(self.w.activity._timer.parent(), self.w.activity)
+
+    def test_progress_says_which_source_and_how_long(self):
+        import time
+        self.w.scan_started()
+        self.w.scan_progress("Reading Reddit (1 of 2)")
+        self.w._started_at = time.monotonic() - 47
+        self.w._tick_elapsed()
+        self.assertIn("Reading Reddit (1 of 2)", self.w.status.text())
+        self.assertIn("47s", self.w.status.text())
+
+    def test_a_long_scan_reads_as_minutes(self):
+        import time
+        self.w.scan_started()
+        self.w._started_at = time.monotonic() - 115      # the measured case
+        self.w._tick_elapsed()
+        self.assertIn("1:55", self.w.status.text())
+
+    def test_a_finished_scan_stops_it_and_says_what_came_back(self):
+        from branch.models import ScanResult
+        self.w.scan_started()
+        self.w.show_result(ScanResult())
+        self.assertFalse(self.w.activity.running)
+        self.assertEqual(self.w.go.text(), "Go, go, go.")
+        self.assertIn("lead", self.w.status.text())
+
+    def test_the_runner_reports_progress_per_source(self):
+        """Without this the status line has nothing to say for two minutes."""
+        source = (ROOT / "branch" / "runner.py").read_text(encoding="utf-8")
+        self.assertIn("progress = Signal(str)", source)
+        collect = source.split("def _collect")[1].split("\n    def ")[0]
+        self.assertIn("self.progress.emit", collect)
+
+    def test_the_app_connects_it(self):
+        source = (ROOT / "branch" / "app.py").read_text(encoding="utf-8")
+        self.assertIn("runner.progress.connect(window.scan_progress)", source)
+
+    def test_interactive_sources_are_not_counted_in_the_progress_total(self):
+        """They are the window's job. Counting them would promise "3 of 5" and
+        then stop at 2."""
+        collect = (ROOT / "branch" / "runner.py").read_text(
+            encoding="utf-8").split("def _collect")[1].split("\n    def ")[0]
+        self.assertIn("interactive", collect.split("for position")[0])
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestEverySourceGetsRead(unittest.TestCase):
+    """Ticking four browser sources must read four, not one.
+
+    Live, 2026-09-16: Craigslist, Marketplace, Facebook and FB Groups were all
+    ticked; only Craigslist ran. The other three were put in a list that nothing
+    ever read, and the scan looked like it had searched them and found nothing.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.w = MainWindow(trades=["plumbing"])
+        self.started: list[str] = []
+        self.finished = []
+        self.w.browsing_finished.connect(lambda: self.finished.append(True))
+
+        class FakeBrowser:
+            def __init__(self, outer):
+                self.outer = outer
+
+            def resize(self, *a):
+                pass
+
+            def harvest_all(self, queue, key):
+                self.outer.started.append(key)
+
+            def harvest(self, url, key, label):
+                self.outer.started.append(key)
+
+        self.w._browser = FakeBrowser(self)
+        self.w._browser_window = lambda: self.w._browser
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_each_source_starts_only_after_the_last_one_finished(self):
+        targets = [("craigslist", "u1", "Craigslist"), ("marketplace", "u2", "Marketplace"),
+                   ("facebook", "u3", "Facebook"), ("groups", "u4", "FB Groups")]
+        self.w.browse(targets)
+        self.assertEqual(self.started, ["craigslist"], "all four at once")
+        for expected in ("marketplace", "facebook", "groups"):
+            self.w._browse_next()
+            self.assertEqual(self.started[-1], expected)
+        self.assertEqual(self.started,
+                         ["craigslist", "marketplace", "facebook", "groups"])
+
+    def test_browsing_is_only_finished_when_the_queue_is_empty(self):
+        self.w.browse([("facebook", "u", "Facebook"), ("groups", "u", "FB Groups")])
+        self.assertEqual(self.finished, [], "finished while one source was unread")
+        self.w._browse_next()
+        self.w._browse_next()
+        self.assertEqual(len(self.finished), 1)
+
+    def test_nothing_ticked_finishes_immediately(self):
+        self.w.browse([])
+        self.assertEqual(self.started, [])
+        self.assertEqual(len(self.finished), 1)
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestTheClockOnScreen(unittest.TestCase):
+    """What the elapsed number means. It restarted on every runner.run() -- and
+    one pass runs twice -- so it kept dropping back to zero mid-session."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.w = MainWindow(trades=["plumbing"])
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_a_session_keeps_one_clock_across_passes(self):
+        import time
+        self.w.session_started()
+        self.w.scan_started()
+        first = self.w._session_started_at
+        time.sleep(0.01)
+        self.w.scan_started()               # the rescan, and then the next pass
+        self.w.scan_started()
+        self.assertEqual(self.w._session_started_at, first,
+                         "the session clock restarted mid-session")
+
+    def test_a_one_off_scan_still_times_itself(self):
+        import time
+        self.w.scan_started()
+        first = self.w._started_at
+        time.sleep(0.01)
+        self.w.scan_started()
+        self.assertGreater(self.w._started_at, first)
+
+    def test_the_clock_resets_when_the_session_ends(self):
+        self.w.session_started()
+        self.w.scan_started()
+        self.w.session_ended("time is up")
+        self.assertEqual(self.w._session_started_at, 0.0)

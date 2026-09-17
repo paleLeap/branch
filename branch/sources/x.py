@@ -53,6 +53,8 @@ def search_urls(query: Query) -> list[tuple[str, str]]:
 class X(_Interactive):
     key = "x"
     label = "X / Twitter"
+    description = ("Public posts on X, searched by city. Needs an X account, and a "
+                   "new one may have search restricted until it is established.")
     cost_per_scan = 0.0        # the browser is not the API; see the module docstring
     geographic = False         # geo operators are retired; see the docstring
     login_service = "X"        # not Facebook's, despite the shared base class

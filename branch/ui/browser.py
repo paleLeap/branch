@@ -208,7 +208,7 @@ SCROLL_JS = r"""
 EXTRACT_JS = r"""
 (() => {
   const seen = new Set(), out = [];
-  const push = (text, url, how) => {
+  const push = (text, url, how, extra) => {
     text = (text || '')
       // Lazy-loading placeholders render the word "Facebook" dozens of times.
       // Strip it before truncating, or the filler eats the real post.
@@ -234,7 +234,7 @@ EXTRACT_JS = r"""
     const key = clean + '|' + text.slice(0, 40);
     if (seen.has(key)) return false;
     seen.add(key);
-    out.push({text: text.slice(0, 1200), url: clean, how: how});
+    out.push({text: text.slice(0, 1200), url: clean, how: how, extra: extra || null});
     return true;
   };
 
@@ -354,6 +354,11 @@ class HarvestBrowser(QWidget):
         # Set while the window is open purely so the user can sign in. Nothing
         # is read, scrolled or collected in this mode.
         self._logging_in = ""
+        # Whether _login_loaded is currently attached. PySide6 does NOT raise
+        # when a disconnect finds nothing connected -- it emits a RuntimeWarning
+        # and returns False -- so a try/except around it catches nothing and the
+        # warning ends up in the user's log. Track it instead of guessing.
+        self._login_hooked = False
         # Set BRANCH_SHOW_BROWSER=1 to watch it work.
         self._always_visible = os.environ.get("BRANCH_SHOW_BROWSER") == "1"
         self._venue = "facebook"
@@ -489,10 +494,7 @@ class HarvestBrowser(QWidget):
         """
         self._expanding = expand
         self._logging_in = ""
-        try:
-            self.view.loadFinished.disconnect(self._login_loaded)
-        except (RuntimeError, TypeError):
-            pass
+        self._unhook_login()
         if not keep:
             self._queue = []
             self._all_items = {}
@@ -525,10 +527,22 @@ class HarvestBrowser(QWidget):
             self.view.loadFinished.disconnect(self._loaded)
         except (RuntimeError, TypeError):
             pass                          # not connected; nothing to undo
-        self.view.loadFinished.connect(self._login_loaded, Qt.UniqueConnection)
+        if not self._login_hooked:
+            self.view.loadFinished.connect(self._login_loaded, Qt.UniqueConnection)
+            self._login_hooked = True
         self.view.load(QUrl(url))
         self.reveal(f"Sign in to {service} here. Branch never sees your password "
                     "-- this is their own page. Close this window when you are done.")
+
+    def _unhook_login(self) -> None:
+        """Detach the sign-in watcher, once, and only if it is attached."""
+        if not self._login_hooked:
+            return
+        self._login_hooked = False
+        try:
+            self.view.loadFinished.disconnect(self._login_loaded)
+        except (RuntimeError, TypeError):
+            pass
 
     def _login_loaded(self, ok: bool) -> None:
         """Did the sign-in take?
@@ -645,8 +659,9 @@ class HarvestBrowser(QWidget):
             self._say("No groups found for that trade and area.")
             self._skip_to_next(why)
             return
-        self._queue = found + self._queue
         self._say(f"Found {len(found)} local groups. Reading them...")
+        self._queue = found + self._queue
+        self._say(f"Found {len(found)} {kind}. Reading them...")
         url, label, expand = self._queue.pop(0)
         self._advance(url, label, f"{len(found)} groups found", expand)
 
@@ -736,10 +751,13 @@ class HarvestBrowser(QWidget):
             if not url or url in self._items:
                 continue
             when = parse_relative_time(text, now)
+            extra = {"time_known": when is not None, "link": link_kind(url)}
+            # A strategy may hand back structure rather than only text -- Google
+            # Maps does, because a business's rating is a number, not a sentence.
+            extra.update(entry.get("extra") or {})
             self._items[url] = Item(
                 id=f"{self._venue}:{url}", text=text, title=None, url=url,
-                venue=self._venue, posted_at=when or now,
-                extra={"time_known": when is not None, "link": link_kind(url)},
+                venue=self._venue, posted_at=when or now, extra=extra,
             )
         before, self._last_count = self._last_count, len(self._items)
         self._stale = 0 if self._last_count != before else self._stale + 1
@@ -780,10 +798,7 @@ class HarvestBrowser(QWidget):
         """
         if self._logging_in:
             self._logging_in = ""
-            try:
-                self.view.loadFinished.disconnect(self._login_loaded)
-            except (RuntimeError, TypeError):
-                pass
+            self._unhook_login()
             self.hide()
             event.accept()
             return

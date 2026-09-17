@@ -73,6 +73,11 @@ class Source(ABC):
     #: service's own form. Branch never sees the password.
     login_url: str = ""
 
+    #: One sentence: what this source actually is. Shown when the user clicks a
+    #: source marked "?" -- "not built yet" answers why it is off but not what
+    #: they are missing, and the second question is the one worth answering.
+    description: str = ""
+
     #: Two or three words for the label on a source that cannot run -- the full
     #: sentence from available() is longer than the window is wide. Sources that
     #: can always run never use it.
@@ -102,14 +107,29 @@ class Source(ABC):
         reason = self.available()
         if reason is not None:
             return SourceState(self.key, self.label, "unavailable",
-                               reason, self.short_reason)
+                               reason, self.short_reason,
+                               description=self.description,
+                               cost=self.cost_per_scan)
         if self.login_service and self.login_service.lower() not in (connected or set()):
             return SourceState(self.key, self.label, "login",
                                f"sign in to {self.login_service} in Branch's own "
                                "browser -- it keeps its own session, separate "
                                "from the one in your normal browser",
-                               "sign in", self.login_service, self.login_url)
-        return SourceState(self.key, self.label, "ready", "", "")
+                               "sign in", self.login_service, self.login_url,
+                               description=self.description,
+                               cost=self.cost_per_scan)
+        return SourceState(self.key, self.label, "ready", "", "",
+                           description=self.description,
+                           cost=self.cost_per_scan, note=self.ticked_note())
+
+    def ticked_note(self) -> str:
+        """One line to show the moment this source is ticked, or nothing.
+
+        For a source that can work more than one way, this is where it says
+        which way it is about to take -- the user is entitled to know that
+        before Go, not afterwards from the results.
+        """
+        return ""
 
     def _unavailable(self, reason: str) -> Fetched:
         return Fetched(unavailable={self.key: reason})
@@ -117,7 +137,14 @@ class Source(ABC):
 
 @dataclass(frozen=True)
 class SourceState:
-    """What the window shows for one source, and why."""
+    """What the window shows for one source, and why.
+
+    `cost` and `note` ride along so a source can say what it is about to do
+    *before* it runs -- what it will cost, or which of two routes it will take.
+    cost_per_scan was declared in the contract and promised "shown before a scan
+    runs", and no part of the window had ever read it. Nothing metered is wired
+    today; this is kept so the next one cannot arrive silently.
+    """
 
     key: str
     label: str
@@ -126,6 +153,9 @@ class SourceState:
     short: str = ""            # two or three words, on the face of it
     service: str = ""          # which sign-in, when state is "login"
     login_url: str = ""
+    description: str = ""      # what this source is, in one sentence
+    cost: float = 0.0          # rough dollars per scan; 0.0 for free sources
+    note: str = ""             # one line shown when the user ticks it, if any
 
     @property
     def selectable(self) -> bool:

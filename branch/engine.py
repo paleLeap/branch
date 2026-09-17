@@ -17,6 +17,61 @@ from .text import compile_phrase, excerpt_around, is_negated, normalize, tokeniz
 
 _FIRST_PERSON = re.compile(r"(?<![a-z0-9])(i|my|mine|i'?m|i'?ve|we|our|us)(?![a-z0-9])")
 
+#: How far back a first-person word can sit and still own the problem, and how
+#: far forward. The window is deliberately LOPSIDED, because English is:
+#:
+#:   "I have a leak"          -- owner, three words before
+#:   "my water heater leaks"  -- owner, two words before
+#:   "it flooded my basement" -- owner, one word after
+#:   "fixing a leak outside of my home"  -- NOT the owner; this is a five-star
+#:                                          review of a plumber, and it was
+#:                                          returned as a lead in a live scan
+#:
+#: Distance alone cannot separate the last two: "my" is one token after in one
+#: and three in the other. Direction can.
+OWNERSHIP_BEFORE = 4
+OWNERSHIP_AFTER = 2
+
+#: Added when the request and the trade sit in the same breath -- "need a
+#: plumber" rather than "need a" somewhere and "pipe" somewhere else. Big enough
+#: to sort the connected ones above the coincidences without hiding anything.
+REQUEST_NEAR_SUBJECT = 3.0
+REQUEST_SUBJECT_WINDOW = 6
+
+
+def _request_is_about_subject(tokens, requests, subjects) -> bool:
+    """Do an asking phrase and a trade word sit close enough to be one thought?"""
+    if not requests or not subjects:
+        return False
+
+    def index(hit) -> int:
+        for n, (_w, start, _e) in enumerate(tokens):
+            if start >= hit.start:
+                return n
+        return len(tokens)
+
+    subject_at = [index(h) for h in subjects]
+    for hit in requests:
+        here = index(hit)
+        if any(abs(here - there) <= REQUEST_SUBJECT_WINDOW for there in subject_at):
+            return True
+    return False
+
+
+def _first_person_near(text: str, tokens: list[tuple[str, int, int]],
+                       hit: PhraseHit) -> bool:
+    """Is the person writing the one with this problem?
+
+    Reuses the tokenisation the negation check already runs on. Looks further
+    back than forward, for the reason written at OWNERSHIP_BEFORE.
+    """
+    index = next((n for n, (_w, start, _e) in enumerate(tokens) if start >= hit.start), None)
+    if index is None:
+        index = len(tokens)
+    lo = max(0, index - OWNERSHIP_BEFORE)
+    hi = min(len(tokens), index + OWNERSHIP_AFTER + 1)
+    return any(_FIRST_PERSON.fullmatch(tokens[n][0]) for n in range(lo, hi))
+
 
 def _match_group(
     group: Group,
@@ -40,7 +95,7 @@ def _match_group(
             phrase=term, group=kind, weight=group.weight,
             start=m.start(), end=m.end(),
             excerpt=excerpt_around(text, m.start(), m.end()),
-            negated=neg,
+            negated=neg, group_kind=group.kind,
         )
         (negated if neg else live).append(hit)
     return live, negated
@@ -241,7 +296,39 @@ def scan(
             ))
             continue
 
-        # 5. Boosts
+        # 5. IS ANYONE ACTUALLY ASKING? This is the whole product, and until it
+        #    existed the engine could not tell these two apart:
+        #
+        #       "Anyone know a plumber? I have a leak under the sink."
+        #       "Excellent service! They did a wonderful job fixing a leak."
+        #
+        #    Both mention plumbing and both hit "leak*". One is a customer and
+        #    one is a five-star review of a competitor, and in a live Dallas scan
+        #    the review was returned as a lead.
+        #
+        #    So a lead needs a REQUEST -- someone asking for the work -- or, when
+        #    nobody has spelled it out, a PROBLEM that belongs to the person
+        #    writing: "my water heater is leaking everywhere" is a customer even
+        #    though they never said "I need a plumber". Ownership is read close to
+        #    the problem itself rather than anywhere in the post, because the
+        #    review above says "my home" three words later and would otherwise
+        #    pass.
+        requests = [h for h in i_hits if h.group_kind == "request"]
+        problems = [h for h in i_hits if h.group_kind != "request"]
+        owned = [h for h in problems if _first_person_near(text, tokens, h)]
+        exp.request_hits = requests
+        exp.owned_problem_hits = owned
+        if not requests and not owned:
+            said = ", ".join(h.phrase for h in problems[:3]) or "nothing"
+            result.discarded.append(Discarded(
+                item=item, stage="request",
+                reason=(f"nobody is asking -- mentions {said}, but no request "
+                        f"and no problem of their own"),
+                explanation=exp,
+            ))
+            continue
+
+        # 6. Boosts
         boost_total = 0.0
         if "question_mark" in profile.boosts and "?" in item.full_text:
             exp.boosts["asks a question"] = profile.boosts["question_mark"]
@@ -249,9 +336,20 @@ def scan(
         if "first_person" in profile.boosts and _FIRST_PERSON.search(text):
             exp.boosts["first person"] = profile.boosts["first_person"]
             boost_total += profile.boosts["first_person"]
+        # Is the asking ABOUT this trade? "need a plumber" is one phrase;
+        # "need a" forty words from "branch" is two coincidences, and a live
+        # Dallas scan returned "I need a mechanic, Farmers Branch area" as a
+        # tree service lead on exactly that.
+        #
+        # A boost rather than a requirement, deliberately: the loose ones are
+        # real leads often enough that dropping them would cost more than the
+        # noise costs. Ranking separates them; a gate would not.
+        if _request_is_about_subject(tokens, exp.request_hits, s_hits):
+            exp.boosts["asks for this trade"] = REQUEST_NEAR_SUBJECT
+            boost_total += REQUEST_NEAR_SUBJECT
         exp.boost_score = boost_total
 
-        # 6. Score
+        # 7. Score
         exp.base_score = s_score + i_score + boost_total
         exp.recency_factor = _recency_factor(
             exp.age_hours, profile.recency_half_life_hours, profile.recency_floor

@@ -96,6 +96,8 @@ class _Interactive(Source):
 class Marketplace(_Interactive):
     key = "marketplace"
     label = "Marketplace"
+    description = ("Facebook Marketplace listings within a real radius -- the only source "
+                   "with true distance. Works without signing in.")
     geographic = True          # a real radius, unlike anything else wired
     # Alone among the Facebook surfaces, this one serves a logged-out visitor --
     # checked, and the source of a confusing symptom once: Marketplace kept
@@ -112,6 +114,8 @@ class Marketplace(_Interactive):
 class FacebookPosts(_Interactive):
     key = "facebook"
     label = "Facebook"
+    description = ("Public Facebook posts matching what your trade's customers ask, "
+                   "searched by city. Needs a Facebook account.")
     geographic = False         # tagged-location only; most posts carry no tag
 
     def url(self, query: Query) -> str:
@@ -158,6 +162,8 @@ class FacebookGroups(_Interactive):
 
     key = "groups"
     label = "FB Groups"
+    description = ("Local Facebook groups -- Branch finds them and reads them without "
+                   "joining. The only Facebook route whose posts have real links.")
     geographic = True          # a DFW group is a place, in a way a search is not
 
     def url(self, query: Query) -> str:

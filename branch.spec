@@ -32,6 +32,11 @@ datas = [
     (str(ROOT / "branch" / "ui" / "theme.json"), "branch/ui"),
     (str(ROOT / "NOTICE"), "."),          # GeoNames attribution -- CC BY 4.0 requires it
     (str(ROOT / "LICENSE"), "."),
+    # The first thing a person sees in the unzipped folder. Somebody who has
+    # never opened a terminal should be able to get a scan running from this
+    # file alone, without finding the repository it came from.
+    (str(ROOT / "START-HERE.txt"), "."),
+    (str(ROOT / "README.md"), "."),
 ]
 # Trade profiles are the part users edit and share, so every one ships.
 datas += [(str(path), "profiles") for path in sorted((ROOT / "profiles").glob("*.yaml"))]

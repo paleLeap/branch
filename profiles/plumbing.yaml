@@ -5,7 +5,7 @@ recency_half_life_hours: 12   # water damage is an emergency; 12h old is already
 
 subject:
   - terms: [plumbing, plumber, pipe, drain, sewer, faucet, toilet, shower, bathtub,
-            water heater, sump pump, garbage disposal, septic, spigot, water main]
+            water heater, heater, sump pump, garbage disposal, septic, spigot, water main]
     weight: 3
     label: fixture
   - terms: ["hot water", "cold water", "water pressure", "sewer line", "main line"]
@@ -13,7 +13,7 @@ subject:
     label: system
 
 intent:
-  - terms: [leak*, flooding, "burst pipe", "backing up", "backed up", clogged, "won't drain",
+  - terms: [leak*, flood*, burst*, "backing up", "backed up", clogged, "won't drain",
             "no hot water", "water everywhere", overflow*, "sewage smell"]
     weight: 4
     label: failure
@@ -21,10 +21,12 @@ intent:
             "know a good", "can anyone help", "emergency plumber"]
     weight: 4
     label: asking-for-help
+    kind: request
   - terms: ["how much should", "quoted me", "what would it cost", "is that reasonable",
             "second opinion", "estimate for"]
     weight: 3
     label: price-checking
+    kind: price
 
 exclude:
   - terms: ["for sale", wtb, "parting out", "asking $", obo]

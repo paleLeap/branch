@@ -54,6 +54,8 @@ def _label_from(url: str) -> str:
 class CustomFeeds(Source):
     key = "feeds"
     label = "My feeds"
+    description = ("Any RSS or Atom feeds you choose, one URL per line in a text file. For"
+                   " sites Branch does not know about.")
     short_reason = "no feeds set"
     cost_per_scan = 0.0
     geographic = False        # whatever the user pointed it at; we cannot know

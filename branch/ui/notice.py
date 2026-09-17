@@ -92,7 +92,7 @@ class SourceNotice(QDialog):
         """Accept with the link chosen. The caller decides where it opens --
         Branch's own browser for a sign-in, so the session is the one scans use,
         and only the system browser for anything else."""
-        self.done(QDialog.Accepted)
+        self.done(int(QDialog.DialogCode.Accepted))
 
     @property
     def link(self) -> str:

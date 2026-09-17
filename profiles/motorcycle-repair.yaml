@@ -29,10 +29,12 @@ intent:
             "who do you use", "need a mechanic", "know a good", "can anyone help"]
     weight: 4
     label: asking-for-help
+    kind: request
   - terms: ["how much should", "quoted me", "is this worth fixing", "what would it cost",
             "shop wants", "estimate for"]
     weight: 3
     label: price-checking
+    kind: price
   - terms: [leak*, "grinding noise", "burning smell", "warning light", "blown fuse",
             "flat spot", "hard to shift"]
     weight: 2

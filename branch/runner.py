@@ -23,6 +23,17 @@ SINCE_HOURS = {
     "Last 3 days": 72.0, "Last week": 168.0, "Last month": 720.0,
 }
 
+#: How long a continuous session runs for, in seconds. "Once" is the original
+#: behaviour and stays the default: one pass, then stop.
+RUN_FOR_SECONDS = {
+    "Once": 0.0, "15 minutes": 900.0, "1 hour": 3600.0, "2 hours": 7200.0,
+}
+
+#: Phrasings asked per pass in a continuous session. Fewer than the profile has,
+#: so a later pass asks questions the earlier ones did not -- see
+#: Profile.ask_phrases(). A one-off scan still asks everything it knows.
+ASKS_PER_CYCLE = 6
+
 
 def _radius_miles(label: str) -> float:
     match = re.search(r"\d+", label or "")
@@ -34,6 +45,11 @@ class ScanRunner(QObject):
 
     finished = Signal(object)
     started = Signal()
+    #: What the scan is doing right now, in words the user can read. A scan can
+    #: take two minutes -- measured, mostly rate-limit backoff -- and without
+    #: this the window says "Searching..." the whole time and a working scan is
+    #: indistinguishable from a hung one.
+    progress = Signal(str)
 
     def __init__(self, root: Path, profiles: dict[str, Profile], parent=None) -> None:
         super().__init__(parent)
@@ -133,6 +149,11 @@ class ScanRunner(QObject):
             self._running = False
 
     def _request(self, query: dict, profile: Profile) -> Query:
+        # A continuous session numbers its passes, and the number rotates the
+        # phrasings so pass two does not ask pass one's questions again. A
+        # one-off scan is cycle 0 and asks everything the profile knows.
+        cycle = int(query.get("cycle", 0) or 0)
+        limit = ASKS_PER_CYCLE if cycle else 10
         return Query(
             trade=profile.trade,
             narrow=query.get("narrow", ""),
@@ -142,8 +163,8 @@ class ScanRunner(QObject):
             since_hours=SINCE_HOURS.get(query.get("since", ""), 24.0),
             terms=profile.prompts(8),
             forums=profile.forums,
-            ask=(profile.ask_phrases(1) or [""])[0],
-            asks=profile.ask_phrases(10),
+            ask=(profile.ask_phrases(1, offset=cycle * limit) or [""])[0],
+            asks=profile.ask_phrases(limit, offset=cycle * limit),
         )
 
     def _collect(self, query: dict, profile: Profile) -> ScanResult:
@@ -151,15 +172,22 @@ class ScanRunner(QObject):
         request = self._request(query, profile)
 
         items, unavailable, notes = [], {}, []
-        for key in chosen:
+        # Only the sources this thread will actually read; the interactive ones
+        # are the window's job and counting them here would promise progress
+        # that never arrives.
+        reading = [k for k in chosen
+                   if not getattr(self.sources.get(k), "interactive", False)
+                   and self.sources.get(k) is not None]
+        for position, key in enumerate(reading, 1):
             source = self.sources.get(key)
             if source is None:
                 unavailable[key] = "unknown source"
                 continue
-            if getattr(source, "interactive", False):
-                # Needs the user and a browser; the window drives it separately.
-                continue
+            self.progress.emit(
+                f"Reading {source.label}" +
+                (f" ({position} of {len(reading)})" if len(reading) > 1 else ""))
             fetched = source.fetch(request)
+            self.progress.emit(f"{source.label}: {len(fetched.items)} posts")
             items.extend(fetched.items)
             unavailable.update(fetched.unavailable)
             for note in fetched.notes:
@@ -169,6 +197,10 @@ class ScanRunner(QObject):
             if fetched.items and not source.geographic:
                 notes.append(f"{source.label}: not filtered by location")
 
+        for key in chosen:
+            source = self.sources.get(key)
+            if source is None:
+                unavailable[key] = "unknown source"
         for key in self.sources:
             if key not in chosen and key not in unavailable:
                 unavailable.setdefault(key, "not selected")
@@ -177,6 +209,7 @@ class ScanRunner(QObject):
 
         items.extend(getattr(self, "_extra", []))
         self._extra = []
+        self.progress.emit(f"Sorting {len(items)} posts")
         result = scan(items, profile,
                       narrow=query.get("narrow") or None,
                       unavailable=unavailable)

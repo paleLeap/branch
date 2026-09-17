@@ -30,15 +30,25 @@ class TestRegistry(unittest.TestCase):
 
     def test_unbuilt_sources_say_so_rather_than_vanishing(self):
         """A toggle with nothing behind it must explain itself, not silently
-        return no results -- that is indistinguishable from finding nothing."""
-        sources = build()
-        self.assertIsInstance(sources["reviews"], NotBuilt)
-        self.assertIn("not built", sources["reviews"].available())
+        return no results -- that is indistinguishable from finding nothing.
+
+        Nothing in the window is unbuilt today -- Reviews was the last one and
+        it was built on 2026-09-16 -- so this pins the behaviour on the class
+        rather than on whichever source happens to be waiting next.
+        """
+        for source in build().values():
+            if isinstance(source, NotBuilt):
+                with self.subTest(source=source.key):
+                    self.assertTrue(source.available())
+                    self.assertTrue(source.short_reason)
+        stub = NotBuilt("later", "Later", "not built yet", "not built")
+        self.assertIn("not built", stub.available())
 
     def test_unbuilt_fetch_returns_a_reason_and_never_raises(self):
-        fetched = build()["reviews"].fetch(Query(trade="t"))
+        fetched = NotBuilt("later", "Later", "not built yet", "not built").fetch(
+            Query(trade="t"))
         self.assertEqual(fetched.items, [])
-        self.assertIn("reviews", fetched.unavailable)
+        self.assertIn("later", fetched.unavailable)
 
     def test_youtube_is_gone_rather_than_listed_as_unbuilt(self):
         """Dropped on purpose: nobody goes to YouTube to ask for a plumber, and
@@ -759,7 +769,9 @@ class TestSourceStates(unittest.TestCase):
 
     def test_unbuilt_and_excluded_sources_are_unavailable_with_a_reason(self):
         states = self._states()
-        for key in ("reviews",):
+        # Reviews used to be here. It runs now -- API with a key, Branch's own
+        # browser on Google Maps without one -- so My feeds carries the rule.
+        for key in ("feeds",):
             with self.subTest(source=key):
                 self.assertEqual(states[key].state, "unavailable")
                 self.assertFalse(states[key].selectable)
@@ -842,6 +854,15 @@ class TestSignInBrowsing(unittest.TestCase):
         than after another empty one."""
         after_load = self._source().split("def _after_load")[1].split("\n    def ")[0]
         self.assertIn("signed_in.emit", after_load)
+
+    def test_the_sign_in_watcher_is_detached_by_bookkeeping_not_by_exception(self):
+        """PySide6 does not raise when a disconnect finds nothing attached -- it
+        emits a RuntimeWarning and returns False. The try/except around it
+        caught nothing, and the warning reached the user's log."""
+        source = self._source()
+        self.assertIn("_login_hooked", source)
+        unhook = source.split("def _unhook_login")[1].split("\n    def ")[0]
+        self.assertIn("if not self._login_hooked", unhook)
 
     def test_the_browser_never_reads_the_password_field(self):
         """The user types their password into the service's own form. Branch is

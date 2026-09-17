@@ -33,7 +33,26 @@ class Group:
     #: is the strongest signal a repair trade gets. Excluding sales there would
     #: throw away the entire reason to read Marketplace at all.
     except_venues: list[str] = field(default_factory=list)
-    patterns: list[re.Pattern[str]] = field(default_factory=list, repr=False)
+    #: What kind of evidence this group is, for intent groups only:
+    #:
+    #:   "request" -- somebody is ASKING for the work: "anyone know a plumber",
+    #:                "need someone to fix", "looking for a mechanic". This is
+    #:                the thing Branch exists to find.
+    #:   "problem"  -- something is wrong: "leaking", "won't start", "backed up".
+    #:                A problem is only a lead when the person describing it is
+    #:                the one who has it. "They did a great job fixing a leak"
+    #:                is a five-star review, and it scored as demand until this
+    #:                distinction existed.
+    #:   "price"    -- shopping the job: "how much should", "quoted me".
+    #:
+    #: Defaults to "problem" because that is the safe reading: it requires
+    #: corroboration before the item counts as a lead. See engine.scan().
+    kind: str = "problem"
+    #: Compiled lazily. With a hundred trade profiles, compiling every phrase in
+    #: every profile at startup cost most of half a second before the window
+    #: appeared -- and the window only needs each trade's NAME to start. A
+    #: profile's patterns are built the first time it is actually scanned with.
+    _patterns: list[re.Pattern[str]] = field(default_factory=list, repr=False)
 
     def applies_to(self, venue: str) -> bool:
         return not any(venue.startswith(v) for v in self.except_venues)
@@ -41,7 +60,12 @@ class Group:
     def __post_init__(self) -> None:
         if not self.terms:
             raise ValueError(f"group {self.label or '?'} has no terms")
-        self.patterns = [compile_phrase(t) for t in self.terms]
+
+    @property
+    def patterns(self) -> list[re.Pattern[str]]:
+        if not self._patterns:
+            self._patterns = [compile_phrase(t) for t in self.terms]
+        return self._patterns
 
 
 @dataclass
@@ -100,6 +124,7 @@ class Profile:
                     weight=float(entry.get("weight", 1.0)),
                     label=str(entry.get("label", label)),
                     except_venues=[str(v) for v in (entry.get("except_venues") or [])],
+                    kind=str(entry.get("kind", "problem")).strip().lower(),
                 ))
             else:
                 raise ValueError(f"{label}: expected string, list or mapping, got {type(entry).__name__}")
@@ -147,16 +172,26 @@ class Profile:
         if not isinstance(data, dict):
             raise ValueError(f"{path}: profile must be a YAML mapping")
 
-        # Exclusions every trade needs -- news, product announcements, listicles.
-        # Kept in one file so a newly written profile inherits them rather than
-        # having to rediscover the same false positives.
+        # Shared rules every trade needs. Two kinds:
+        #
+        #   exclude -- news, product announcements, listicles, the trade
+        #              advertising itself. Kept in one file so a new profile
+        #              inherits them rather than rediscovering them.
+        #   intent  -- HOW PEOPLE ASK, which is almost entirely trade-agnostic.
+        #              "anyone know a good ___", "please help", "need someone
+        #              to ___" are the same sentence whoever is being asked for,
+        #              and a real lead was nearly lost because one profile's own
+        #              list happened not to contain "please help". A profile
+        #              says what its trade is about; the shared file says what
+        #              asking looks like.
         defaults = path.parent / "_defaults.yaml"
         if defaults.exists() and path.name != "_defaults.yaml":
             try:
                 with defaults.open("r", encoding="utf-8") as fh:
                     shared = yaml.safe_load(fh) or {}
-                if shared.get("exclude"):
-                    data["exclude"] = list(data.get("exclude") or []) + list(shared["exclude"])
+                for key in ("exclude", "intent"):
+                    if shared.get(key):
+                        data[key] = list(data.get(key) or []) + list(shared[key])
             except Exception as exc:
                 print(f"warning: ignoring {defaults}: {exc}")
 
@@ -244,23 +279,44 @@ class Profile:
                     return out
         return out
 
-    def ask_phrases(self, limit: int = 3) -> list[str]:
+    def ask_phrases(self, limit: int = 3, offset: int = 0) -> list[str]:
         """How this trade's customers phrase the request itself.
 
         Different from prompts(): a prompt narrows results already found
         ("water heater"), whereas this is what someone actually types when they
         want the work done ("need a plumber"). Facebook search needs the latter.
+
+        `offset` rotates the list, which is what a continuous session uses to ask
+        different questions on each pass rather than the same ones over and over.
+        Rotation only buys coverage when a profile has **more** phrasings than one
+        pass asks -- with ten phrasings and ten asked, it only changes the order.
+        Adding phrasings to the YAML is what makes a long session find more.
         """
         if self.ask_terms:
-            return self.ask_terms[:limit]
+            return self._rotate(self.ask_terms, limit, offset)
         # Falling back to the asking-for-help group is better than nothing, but
         # those phrases are deliberately trade-agnostic ("any recommendations") --
         # searching one finds recommendations for everything. A profile should
         # name its own.
         for group in sorted(self.intent, key=lambda g: -g.weight):
             if "ask" in group.label.lower():
-                return [t.replace("*", "") for t in group.terms[:limit]]
+                return self._rotate([t.replace("*", "") for t in group.terms],
+                                    limit, offset)
         return self.prompts(limit)
+
+    @staticmethod
+    def _rotate(terms: list[str], limit: int, offset: int) -> list[str]:
+        """`limit` phrases starting `offset` in, wrapping at the end.
+
+        Never returns the same phrase twice in one pass, however large the
+        offset: a pass that asked "need a plumber" twice would spend a Facebook
+        search on a page it had already read.
+        """
+        if not terms or limit <= 0:
+            return []
+        start = offset % len(terms)
+        ordered = terms[start:] + terms[:start]
+        return ordered[:limit]
 
     def validate(self) -> list[str]:
         """Non-fatal warnings to surface in the profile editor."""

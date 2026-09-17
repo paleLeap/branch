@@ -66,6 +66,8 @@ def configured_sites() -> list[str]:
 class Discourse(Source):
     key = "forums"
     label = "Forums"
+    description = ("Discussion forums that run on Discourse, searched through their public"
+                   " API. Which forums comes from the trade profile.")
     short_reason = "no forums set"
     cost_per_scan = 0.0
     geographic = False        # a city forum would be; we cannot know which

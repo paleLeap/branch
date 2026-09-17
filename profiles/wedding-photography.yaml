@@ -23,6 +23,7 @@ intent:
             "our photographer cancelled"]
     weight: 4
     label: asking-for-help
+    kind: request
   - terms: ["getting married", "just got engaged", "we're engaged", "planning our wedding",
             "booking vendor*", "budget for photo*"]
     weight: 3
@@ -31,6 +32,7 @@ intent:
             "worth the money"]
     weight: 3
     label: price-checking
+    kind: price
 
 exclude:
   - terms: [hiring, "second shooter wanted", "job posting", resume, "assistant needed"]

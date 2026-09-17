@@ -115,6 +115,8 @@ def _venue_of(url: str, fallback: str) -> str:
 class Reddit(Source):
     key = "reddit"
     label = "Reddit"
+    description = ("Local subreddits inside your radius, read from Reddit's public feeds. "
+                   "No account needed.")
     cost_per_scan = 0.0        # free tier, non-commercial, user's own client
     geographic = True
 

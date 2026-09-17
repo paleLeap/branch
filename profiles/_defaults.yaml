@@ -38,3 +38,65 @@ exclude:
             "can't recommend", "shout out to", "shoutout to", "big thanks to",
             "did a great job", "did an amazing job", "10/10 would"]
     label: recommending-not-asking
+
+# HOW PEOPLE ASK, merged into every profile.
+#
+# Asking is trade-agnostic. "Anyone know a good ___", "please help", "need
+# someone to ___" are the same sentence whether the blank is a plumber, a
+# photographer or a dog groomer, and keeping them here means a new trade profile
+# only has to say what its own work is called.
+#
+# These are `kind: request`, which is what the engine requires before anything is
+# a lead: a post that mentions the trade and a problem, with nobody asking for
+# anything, is a review or an advert. See engine.scan() step 5.
+#
+# A real lead from a live Dallas scan -- "the water heater at attic is leaking,
+# needs to fix now, please help" -- has no first person and no trade-specific ask
+# in it at all. It survives because of this list.
+
+  # A Facebook GROUP is not a post. Search results mix in group suggestion
+  # cards -- "I Need an Auto Mechanic - Utah Public · 418 members · Join" -- and
+  # the group's NAME reads exactly like the request it was named after. That one
+  # came back as a Dallas lead for a group in Utah.
+  - terms: ["members join", "members  join", "public group", "private group",
+            "members · join", "group · ", "join group", "members · public"]
+    label: a-group-not-a-post
+
+  # Somebody touting for work, in words a customer never uses about themselves.
+  - terms: ["call out fee", "my prices", "my rates", "great prices", "best prices",
+            "dm me for a quote", "message me for a quote", "pm me for a quote",
+            "hmu for", "i offer", "i provide", "i specialize", "i specialise",
+            "taking new clients", "accepting new clients", "now booking",
+            "openings available", "slots available", "book with me", "hire me",
+            "no job too small", "free quotes"]
+    label: touting-for-work
+
+  # A job advert is not a customer. This is the one false positive that hits
+  # EVERY trade at once -- "we are looking for someone to manage our server,
+  # salary 70-90k, W2 only" matched an appliance repair profile on the word
+  # "range" and a tax profile on "W2", because the shared asking language
+  # ("looking for someone") is exactly what a job advert says too.
+  - terms: ["salary", "w2 only", "1099 only", "per hour", "an hour", "hourly rate",
+            "pay range", "benefits included", "health insurance", "401k",
+            "full-time position", "part-time position", "send your resume",
+            "dm your resume", "email your resume", "join our team", "we are hiring",
+            "now accepting applications", "background check required",
+            "must have own tools", "valid driver's license required"]
+    label: job-advert
+
+intent:
+  - terms: ["anyone know a", "anyone know of a", "does anyone know", "anyone have a",
+            "any recommendation*", "any recs", "recommendations for", "recs for",
+            "looking for a", "looking for someone", "in need of", "i need a",
+            "i need someone", "need someone to", "need someone", "need somebody",
+            "need a good", "need a", "need an", "looking for", "trying to find",
+            "can anyone", "can someone", "does anyone do", "is there anyone",
+            "anyone available", "anyone who can", "who can fix", "who do you use",
+            "who does", "know anyone", "know a good", "know of anyone",
+            "please help", "help please", "need help with", "iso ", "in search of",
+            "looking to hire", "willing to pay", "how much would it cost",
+            "needs to be fixed", "needs fixing", "needs to fix", "need it fixed",
+            "asap", "urgently", "emergency"]
+    weight: 4
+    kind: request
+    label: asking

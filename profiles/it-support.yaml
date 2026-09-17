@@ -21,10 +21,12 @@ intent:
             "who do you use", "know a good", "can anyone help", "looking to outsource"]
     weight: 4
     label: asking-for-help
+    kind: request
   - terms: ["how much should", "quoted us", "what would it cost", "is that reasonable",
             "per seat", "monthly retainer"]
     weight: 3
     label: price-checking
+    kind: price
 
 exclude:
   - terms: [hiring, "now hiring", "job posting", resume, "apply within", "salary range", "w2", "c2c"]

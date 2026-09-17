@@ -18,11 +18,13 @@ from .x import X
 class NotBuilt(Source):
     """A toggle with no adapter behind it yet."""
 
-    def __init__(self, key: str, label: str, reason: str, short: str) -> None:
+    def __init__(self, key: str, label: str, reason: str, short: str,
+                 description: str = "") -> None:
         self.key = key
         self.label = label
         self._reason = reason
         self.short_reason = short
+        self.description = description
 
     def available(self) -> str | None:
         return self._reason
@@ -59,9 +61,15 @@ def build() -> dict[str, Source]:
     # YouTube was dropped rather than left unbuilt: people do not go to YouTube
     # to ask for a plumber, and a toggle that will never be worth building is
     # just a promise the window cannot keep.
-    for key, label, reason, short in [
-        ("reviews", "Reviews",
-         "not built yet -- needs a Google Places API key", "needs a key"),
-    ]:
-        sources[key] = NotBuilt(key, label, reason, short)
+    # Reviews was built here and then removed, on 2026-09-16, by the person who
+    # asked for it: a reviewer is somebody you cannot message, so a review finds
+    # nobody who needs work doing. It watched competitors instead, which is a
+    # different product. The rule it broke is the one Hacker News, Lemmy and
+    # Mastodon were dropped for -- a source that cannot produce a lead is a row
+    # of the window spent on nothing.
+    #
+    # NotBuilt stays because the next source that is only half a thought still
+    # has to appear with its reason; a toggle simply absent is silent omission.
+    for key, label, reason, short, description in []:
+        sources[key] = NotBuilt(key, label, reason, short, description)
     return sources
