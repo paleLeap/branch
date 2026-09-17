@@ -818,7 +818,8 @@ class TestStatusMarks(unittest.TestCase):
         from branch.ui.widgets import SourceToggle
         expected = {
             "reddit": SourceToggle.READY, "craigslist": SourceToggle.READY,
-            "marketplace": SourceToggle.READY, "forums": SourceToggle.READY,
+            "marketplace": SourceToggle.NEEDS_ACCOUNT,
+            "forums": SourceToggle.READY,
             "facebook": SourceToggle.NEEDS_ACCOUNT,
             "groups": SourceToggle.NEEDS_ACCOUNT,
             "x": SourceToggle.NEEDS_ACCOUNT,

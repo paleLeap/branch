@@ -380,6 +380,25 @@ class HarvestBrowser(QWidget):
         self.profile.setCachePath(str(store / "cache"))
         self.profile.setPersistentCookiesPolicy(
             QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
+        # WHAT COUNTS AS SIGNED IN. A page that rendered used to count, on the
+        # reasoning that a gated page only renders for a session. It does not
+        # hold: a consent screen, an interstitial or a redirect all render, and
+        # one of them marked a user's Facebook "connected" when he had never
+        # signed in -- so the window showed a tick and his scans found nothing.
+        #
+        # The session cookie is the evidence. This is Branch's OWN profile, not
+        # the user's browser, and only the NAME is looked at -- never a value,
+        # which is the part that would actually be a credential.
+        store = self.profile.cookieStore()
+        store.cookieAdded.connect(self._cookie_seen)
+        store.cookieRemoved.connect(self._cookie_gone)
+        # Check what this profile already holds, and -- just as important -- say
+        # so when it holds nothing. A user whose Facebook was wrongly recorded as
+        # connected would otherwise keep the tick forever, because nothing ever
+        # contradicted it.
+        self._seen_services: set[str] = set()
+        store.loadAllCookies()
+        QTimer.singleShot(2000, self._report_missing_sessions)
 
         # Qt's default user agent announces "QtWebEngine/6.10.2", and X refuses
         # to run its login flow for an embedded browser -- the sign-in simply
@@ -453,6 +472,41 @@ class HarvestBrowser(QWidget):
         bar.addWidget(self.finish, 0)
         layout.addLayout(bar, 0)
 
+
+    #: The cookie each service sets when, and only when, somebody is signed in.
+    #: Names only -- the value is the credential and is never read, logged or
+    #: stored. Presence is the whole question.
+    SESSION_COOKIES = {
+        "c_user": ("facebook.com", "Facebook"),
+        "auth_token": ("x.com", "X"),
+    }
+
+    def _service_for_cookie(self, cookie) -> str:
+        name = bytes(cookie.name()).decode("ascii", "ignore")
+        known = self.SESSION_COOKIES.get(name)
+        if not known:
+            return ""
+        domain, service = known
+        return service if domain in cookie.domain() else ""
+
+    def _cookie_seen(self, cookie) -> None:
+        service = self._service_for_cookie(cookie)
+        if service:
+            self._seen_services.add(service)
+            self.signed_in.emit(service, True)
+
+    def _report_missing_sessions(self) -> None:
+        """Every service this profile has no session for, said out loud once."""
+        for _name, (_domain, service) in self.SESSION_COOKIES.items():
+            if service not in self._seen_services:
+                self.signed_in.emit(service, False)
+
+    def _cookie_gone(self, cookie) -> None:
+        """Signed out, or the session expired. Say so before the next scan runs
+        into it and comes back empty for no visible reason."""
+        service = self._service_for_cookie(cookie)
+        if service:
+            self.signed_in.emit(service, False)
 
     def _new_page(self):
         from PySide6.QtWebEngineCore import QWebEnginePage
@@ -632,12 +686,8 @@ class HarvestBrowser(QWidget):
                         "be signed in -- open facebook.com above, sign in, then "
                         "press Collect.")
             return
-        # A gated page that rendered is proof of a working session -- the only
-        # positive evidence there is, short of reading the cookie jar, which is
-        # the user's and not ours to open.
-        service = VENUE_SERVICE.get(self._venue)
-        if service:
-            self.signed_in.emit(service, True)
+        # A page that rendered proves nothing about a session; the cookie jar
+        # does, and _cookie_seen is what reports it.
         self._not_found = 0
         self._say("Reading the page...")
         QTimer.singleShot(SETTLE_MS, self._begin_scrolling)

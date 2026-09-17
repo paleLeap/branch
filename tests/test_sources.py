@@ -761,8 +761,10 @@ class TestSourceStates(unittest.TestCase):
         return {k: s.state(set(connected)) for k, s in build().items()}
 
     def test_the_sources_that_need_nothing_are_ready(self):
+        # Marketplace left this list when it started asking for the Facebook
+        # account every other Facebook surface asks for.
         states = self._states()
-        for key in ("reddit", "craigslist", "marketplace"):
+        for key in ("reddit", "craigslist"):
             with self.subTest(source=key):
                 self.assertEqual(states[key].state, "ready")
                 self.assertTrue(states[key].selectable)
@@ -800,11 +802,14 @@ class TestSourceStates(unittest.TestCase):
                 # Still tickable: ticking it is how the user reaches the sign-in.
                 self.assertTrue(states[key].selectable)
 
-    def test_marketplace_does_not_claim_to_need_a_sign_in(self):
-        """It serves a logged-out visitor, unlike Facebook search and groups --
-        checked live. Saying otherwise would send the user to sign in to fix
-        something that was never broken."""
-        self.assertEqual(self._states()["marketplace"].state, "ready")
+    def test_marketplace_asks_for_the_account_it_needs(self):
+        """It used to claim a logged-out visitor got results. Whether or not
+        that still holds, it was the one Facebook surface showing a tick to
+        somebody with no account -- telling him he was set up when he was not,
+        which is worse than sending him to a sign-in he did not strictly need."""
+        self.assertEqual(self._states()["marketplace"].state, "login")
+        self.assertEqual(self._states(connected={"facebook"})["marketplace"].state,
+                         "ready")
 
     def test_a_signed_in_service_stops_asking(self):
         states = self._states(connected={"facebook"})
@@ -1011,3 +1016,51 @@ class TestForumsAvailability(unittest.TestCase):
         from pathlib import Path
         from branch.sources.discourse import profile_sites
         self.assertEqual(profile_sites(Path("/nonexistent/profiles")), [])
+
+
+class TestATickMeansSignedIn(unittest.TestCase):
+    """Reported from a friend's machine, v0.2.2: Facebook, Marketplace and FB
+    Groups all showed ticks and he had never signed in to anything.
+
+    Two causes. The browser counted any page that rendered as proof of a
+    session, so one consent screen or redirect marked him connected for good.
+    And Marketplace claimed to need no account at all.
+    """
+
+    def setUp(self):
+        self.source = (ROOT / "branch" / "ui" / "browser.py").read_text(encoding="utf-8")
+
+    def test_a_page_that_rendered_is_no_longer_called_a_session(self):
+        self.assertNotIn("is proof of a working session", self.source)
+
+    def test_the_session_cookie_is_what_counts(self):
+        from branch.ui import browser
+        self.assertIn("c_user", browser.HarvestBrowser.SESSION_COOKIES)
+        self.assertIn("auth_token", browser.HarvestBrowser.SESSION_COOKIES)
+
+    def test_only_the_cookies_name_is_read_never_its_value(self):
+        """The value is the credential. Presence is the whole question."""
+        block = self.source.split("def _service_for_cookie")[1].split("def _cookie_seen")[0]
+        self.assertIn("cookie.name()", block)
+        self.assertNotIn("cookie.value()", block)
+
+    def test_a_profile_with_no_session_says_so(self):
+        """Otherwise a wrongly-recorded tick is never contradicted and stays
+        forever -- which is what happened to him."""
+        self.assertIn("_report_missing_sessions", self.source)
+        self.assertIn("loadAllCookies", self.source)
+
+    def test_every_facebook_surface_asks_for_the_same_account(self):
+        from branch.sources.registry import build
+        sources = build()
+        for key in ("facebook", "groups", "marketplace"):
+            with self.subTest(source=key):
+                self.assertEqual(sources[key].login_service, "Facebook")
+
+    def test_nothing_claims_ready_for_an_account_it_has_not_seen(self):
+        from branch.sources.registry import build
+        for key, source in build().items():
+            with self.subTest(source=key):
+                if source.login_service:
+                    self.assertEqual(source.state(set()).state, "login",
+                                     f"{key} ticks without the account it needs")

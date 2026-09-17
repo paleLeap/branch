@@ -97,15 +97,16 @@ class Marketplace(_Interactive):
     key = "marketplace"
     label = "Marketplace"
     description = ("Facebook Marketplace listings within a real radius -- the only source "
-                   "with true distance. Works without signing in.")
+                   "with true distance. Needs a Facebook account.")
     geographic = True          # a real radius, unlike anything else wired
-    # Alone among the Facebook surfaces, this one serves a logged-out visitor --
-    # checked, and the source of a confusing symptom once: Marketplace kept
-    # returning results while search and groups returned a bare "Not Found",
-    # which read like a broken URL rather than a missing session. So it is not
-    # marked as needing a sign-in, because it does not.
-    login_service = ""
-    login_url = ""
+    # This used to claim it needed no sign-in, on an observation that a
+    # logged-out visitor still got results. Facebook gates more of Marketplace
+    # than it did, and the claim had a worse cost than being wrong: it was the
+    # one Facebook surface showing a tick to somebody with no account, which
+    # told him he was set up when he was not. A source that needs the account
+    # says so, and the tick means what it says everywhere else.
+    login_service = "Facebook"
+    login_url = "https://www.facebook.com/login"
 
     def url(self, query: Query) -> str:
         return marketplace_url(query)
