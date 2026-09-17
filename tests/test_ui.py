@@ -1305,3 +1305,31 @@ class TestTheWindowKeepsTheSizeYouGaveIt(unittest.TestCase):
         self.app.processEvents()
         self.assertEqual(self.w._user_height, 800,
                          "the program's own resize was recorded as the user's")
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestTheWiringActuallyReachesTheMarks(unittest.TestCase):
+    """Through app.build(), not through the pieces.
+
+    The pieces all passed while the program could not start at all once, and
+    while four ticked sources ran one. Signals that are connected in main() are
+    only proved by main().
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_changing_the_trade_changes_what_the_sources_claim(self):
+        from branch import app as branch_app
+        from branch.ui.theme import Theme
+        window = branch_app.build(Theme.load())
+        try:
+            window._combos["trade"].setCurrentText("Graphic Designer")
+            self.app.processEvents()
+            self.assertEqual(window._source_states["forums"].state, "unavailable")
+            window._combos["trade"].setCurrentText("IT Support / Managed Services")
+            self.app.processEvents()
+            self.assertEqual(window._source_states["forums"].state, "ready")
+        finally:
+            window.deleteLater()
