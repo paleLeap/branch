@@ -78,6 +78,18 @@ class Discourse(Source):
                     f"{cache_path().parent / 'forums.txt'} -- one URL per line")
         return None
 
+    def available_for(self, profile) -> str | None:
+        """This trade's forums, not any trade's.
+
+        A user who picks Graphic Designer and sees Forums ticked has been told
+        it will read something. It will not: no graphic design profile names a
+        forum, and the toggle said "ready" because two unrelated trades do.
+        """
+        if configured_sites() or (getattr(profile, "forums", None) or []):
+            return None
+        return (f"{profile.name} names no forum, and there is nothing in "
+                f"{cache_path().parent / 'forums.txt'} -- one URL per line")
+
     def fetch(self, query: Query) -> Fetched:
         sites = list(dict.fromkeys(list(query.forums or []) + configured_sites()))
         if not sites:

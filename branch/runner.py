@@ -84,7 +84,7 @@ class ScanRunner(QObject):
     def availability(self) -> dict[str, str | None]:
         return {key: source.available() for key, source in self.sources.items()}
 
-    def source_states(self) -> dict:
+    def source_states(self, trade_slug: str | None = None) -> dict:
         """What the window should show for every source, in one pass.
 
         The connected-account flags are read here rather than in the adapters so
@@ -93,7 +93,9 @@ class ScanRunner(QObject):
         """
         from . import accounts
         signed_in = accounts.connected_services()
-        return {key: source.state(signed_in) for key, source in self.sources.items()}
+        profile = self.profiles.get(trade_slug) if trade_slug else None
+        return {key: source.state(signed_in, profile)
+                for key, source in self.sources.items()}
 
     def interactive_targets(self, query: dict) -> list[tuple[str, str, str]]:
         """(key, url, label) for each chosen source that needs a browser."""

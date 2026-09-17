@@ -91,7 +91,18 @@ class Source(ABC):
     def fetch(self, query: Query) -> Fetched:
         """Get posts. Must not raise; return Fetched with an `unavailable` entry."""
 
-    def state(self, connected: set[str] | None = None) -> "SourceState":
+    def available_for(self, profile) -> str | None:
+        """Why this source cannot run FOR THIS TRADE, if it cannot.
+
+        Most sources are the same whatever the trade, so this is available()
+        by default. Forums is not: it knows about forums because some profile
+        names one, and a trade that names none can do nothing with it. Saying
+        "ready" there is the window telling the user something untrue about the
+        choice he just made.
+        """
+        return self.available()
+
+    def state(self, connected: set[str] | None = None, profile=None) -> "SourceState":
         """What the window should show for this source, in one answer.
 
         `connected` is the set of services whose sign-in Branch has seen, lower
@@ -104,7 +115,7 @@ class Source(ABC):
         cannot run at all and says why. Collapsing login into unavailable would
         hide the one state the user can actually fix.
         """
-        reason = self.available()
+        reason = self.available_for(profile) if profile is not None else self.available()
         if reason is not None:
             return SourceState(self.key, self.label, "unavailable",
                                reason, self.short_reason,

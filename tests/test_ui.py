@@ -1174,3 +1174,134 @@ class TestTheProgramAgreesWithItsInstructions(unittest.TestCase):
                                __import__("branch.ui.window", fromlist=["x"]).REFINE_FIELDS
                                if k == key)
                 self.assertIn(value, options, f"{key} default is not on the list")
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestTheMarksTellTheTruth(unittest.TestCase):
+    """A tick means "this will read something for the trade you picked".
+
+    Seen on a friend's machine, v0.2.1: Graphic Designer chosen, Forums ticked
+    and marked ready. No graphic design profile names a forum -- the source was
+    ready because two unrelated trades do, and the window told him something
+    untrue about the choice he had just made.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        self.profiles = Profile.load_all(ROOT / "profiles")
+        self.runner = ScanRunner(ROOT, self.profiles)
+        names = {p.name: slug for slug, p in self.profiles.items()}
+        self.w = MainWindow(trades=sorted(names), trade_slugs=names)
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_forums_is_unavailable_for_a_trade_with_no_forums(self):
+        state = self.runner.source_states("graphic-designer")["forums"]
+        self.assertEqual(state.state, "unavailable")
+        self.assertIn("names no forum", state.reason)
+
+    def test_forums_is_ready_for_a_trade_that_names_one(self):
+        self.assertEqual(self.runner.source_states("it-support")["forums"].state,
+                         "ready")
+
+    def test_choosing_a_trade_reasks_the_sources(self):
+        seen = []
+        self.w.trade_changed.connect(seen.append)
+        self.w._combos["trade"].setCurrentText("Graphic Designer")
+        self.assertIn("graphic-designer", seen)
+
+    def test_a_source_that_cannot_run_for_this_trade_is_not_scanned(self):
+        self.w.set_source_states(self.runner.source_states("graphic-designer"))
+        self.w._sources["forums"].setChecked(True)
+        self.assertNotIn("forums", self.w.current_query()["sources"])
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestTheClockNeverShowsTheMachinesUptime(unittest.TestCase):
+    """Signing in to X started the activity dot before any scan had run, and
+    the elapsed clock counted from zero on the monotonic clock -- the machine's
+    boot. The friend's screenshot read "2046:05" beside the sign-in prompt."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.w = MainWindow(trades=["plumbing"])
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_no_clock_is_shown_before_anything_has_started_one(self):
+        self.w.activity.start()
+        self.w._status_text = "Sign in to X here."
+        self.w._tick_elapsed()
+        self.assertEqual(self.w.status.text(), "Sign in to X here.")
+
+    def test_a_sign_in_starts_the_clock_from_now(self):
+        self.w._browsing_progress("Sign in to X here.")
+        self.w._tick_elapsed()
+        self.assertLess(self.w._elapsed_seconds_for_test(), 5,
+                        "the clock is counting from something other than now")
+
+    def test_a_session_clock_that_was_never_set_shows_nothing(self):
+        self.w._session_running = True
+        self.w._session_started_at = 0.0
+        self.w.activity.start()
+        self.w._status_text = "working"
+        self.w._tick_elapsed()
+        self.assertEqual(self.w.status.text(), "working")
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestTheWindowKeepsTheSizeYouGaveIt(unittest.TestCase):
+    """Reported from a friend's machine: "the program shrunk itself to a default
+    size after being ran for a certain amount of time ~2 minutes". Two minutes
+    is how long Reddit takes -- the window was resizing itself to fit the
+    results and throwing away the size he had dragged it to."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.w = MainWindow(trades=["plumbing"])
+        self.w.show()
+        self.app.processEvents()
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def _finish_a_scan(self):
+        from branch.models import ScanResult
+        self.w.show_result(ScanResult(scanned=10))
+        self.app.processEvents()
+        self.w._fit_results()
+
+    def test_a_finished_scan_never_shrinks_a_window_the_user_enlarged(self):
+        self.w.resize(1200, 900)
+        self.app.processEvents()
+        chosen = self.w.height()
+        self._finish_a_scan()
+        self.assertGreaterEqual(self.w.height(), chosen)
+
+    def test_it_still_grows_to_show_what_came_back(self):
+        self.w.resize(900, 200)
+        self.app.processEvents()
+        small = self.w.height()
+        self._finish_a_scan()
+        self.assertGreater(self.w.height(), small)
+
+    def test_the_programs_own_resizing_is_not_mistaken_for_the_users(self):
+        self.w.resize(1000, 800)
+        self.app.processEvents()
+        self.w._set_height(300)
+        self.app.processEvents()
+        self.assertEqual(self.w._user_height, 800,
+                         "the program's own resize was recorded as the user's")

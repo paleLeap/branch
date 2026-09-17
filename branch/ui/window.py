@@ -100,6 +100,10 @@ class MainWindow(QWidget):
     #: Every source that needed the browser has now been read. A pass is not
     #: over until this fires, however many sources were ticked.
     browsing_finished = Signal()
+    #: The trade changed, so what each source can do may have changed with it --
+    #: Forums is ready for a trade that names one and useless for a trade that
+    #: does not, and the marks have to follow the choice.
+    trade_changed = Signal(str)
     #: (service, url) -- the user pressed "Sign in to Facebook". The app opens
     #: Branch's own browser on that page; Branch never sees what is typed there.
     login_requested = Signal(str, str)
@@ -124,6 +128,11 @@ class MainWindow(QWidget):
         # button into a Stop button and keeps it live between passes.
         self._session_running = False
         self._session_started_at = 0.0
+        #: True while the program itself is resizing, so resizeEvent can tell
+        #: a size the user chose from one the program chose.
+        self._resizing_ourselves = False
+        #: The height the user last set by dragging. Never shrunk past.
+        self._user_height = 0
         # key -> SourceState, so current_query() can refuse to send a source
         # that cannot run even if something ticked it programmatically.
         self._source_states: dict = {}
@@ -538,7 +547,9 @@ class MainWindow(QWidget):
         self.query.setFocus(Qt.OtherFocusReason)
 
     def _trade_changed(self, label: str) -> None:
-        """Re-point the search box's suggestions at the chosen trade."""
+        """Re-point the search box's suggestions at the chosen trade, and re-ask
+        the sources what they can do for it."""
+        self.trade_changed.emit(self._trade_slugs.get(label.strip(), ""))
         prompts = self._trade_prompts.get(label.strip(), [])
         self.query.set_prompts(prompts)
         self._prompt_list.set_prompts(prompts)
@@ -684,6 +695,12 @@ class MainWindow(QWidget):
         if not self.activity.running:
             self.activity.start()
             self._elapsed.start()
+            # Clicking a source to sign in starts this before any scan has run,
+            # and the clock counted from zero-on-the-monotonic-clock -- which is
+            # the machine's boot. A user signing in to X saw "2046:05" beside
+            # the prompt. This work started now.
+            if not self._started_at:
+                self._started_at = time.monotonic()
         self.scan_progress(message.rstrip("."))
 
     def scan_started(self) -> None:
@@ -704,11 +721,23 @@ class MainWindow(QWidget):
         self._status_text = message
         self._tick_elapsed()
 
+    def _elapsed_seconds_for_test(self) -> float:
+        """How long the clock on screen thinks this has been running."""
+        since = (self._session_started_at if self._session_running
+                 else self._started_at)
+        return time.monotonic() - since if since else 0.0
+
     def _tick_elapsed(self) -> None:
         if not self.activity.running:
             return
         since = (self._session_started_at if self._session_running
                  else self._started_at)
+        if not since:
+            # Nothing has started a clock. Say what is happening, without a
+            # number -- a wrong number is worse than none.
+            self.status.setText(self._status_text)
+            self.status.adjustSize()
+            return
         seconds = int(time.monotonic() - since)
         clock = f"{seconds // 60}:{seconds % 60:02d}" if seconds >= 60 else f"{seconds}s"
         self.status.setText(f"{self._status_text}  ·  {clock}".strip(" ·"))
@@ -752,16 +781,29 @@ class MainWindow(QWidget):
             return
         wanted = self._collapsed_height + min(self.results.natural_height(),
                                               self.theme.s(Size.results_h))
-        self.resize(self.width(), wanted)
+        # Grow to fit, never shrink past what the user set for themselves.
+        wanted = max(wanted, self._user_height)
+        if wanted != self.height():
+            self._set_height(wanted)
         self._position_controls()
+
+    def _set_height(self, height: int) -> None:
+        """Resize on the program's own initiative, without that being mistaken
+        for the user dragging the window."""
+        self._resizing_ourselves = True
+        try:
+            self.resize(self.width(), height)
+        finally:
+            self._resizing_ourselves = False
 
     def clear_results(self) -> None:
         if not self.results.isVisible():
             return
         self.results.hide()
         self._fit_window()
-        self.resize(self.width(), max(getattr(self, "_collapsed_height", self.height()),
-                                      self.minimumSizeHint().height()))
+        self._set_height(max(getattr(self, "_collapsed_height", self.height()),
+                             self.minimumSizeHint().height(),
+                             self._user_height))
         self._position_controls()
 
     def _exclude_phrase(self, phrase: str) -> None:
@@ -883,6 +925,13 @@ class MainWindow(QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        # A size the USER chose is a decision, and the program does not get to
+        # overrule it. Results arriving used to resize the window to whatever
+        # the list needed, so a window dragged large snapped back to a small
+        # default the moment a scan finished -- on Reddit, about two minutes
+        # after pressing Go. It looked like the program had restarted itself.
+        if not self._resizing_ourselves:
+            self._user_height = self.height()
         self._position_controls()
 
     def showEvent(self, event) -> None:

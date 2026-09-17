@@ -223,11 +223,13 @@ def build(theme) -> "MainWindow":
         """
         window.open_login(service, url)
 
-    def _refresh_states() -> None:
-        window.set_source_states(runner.source_states())
+    def _refresh_states(trade_slug: str = "") -> None:
+        window.set_source_states(
+            runner.source_states(trade_slug or window.current_query().get("trade_slug")))
 
     window.login_requested.connect(_sign_in)
     window.login_finished.connect(_refresh_states)
+    window.trade_changed.connect(_refresh_states)
 
     return window
 
