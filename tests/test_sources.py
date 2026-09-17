@@ -401,14 +401,32 @@ class TestFacebook(unittest.TestCase):
         self.assertIn("browser", " ".join(fetched.unavailable.values()))
 
     def test_the_runner_skips_them_instead_of_calling_fetch(self):
+        """The account is patched in. Without that this test asks whether the
+        machine running it happens to be signed in to Facebook -- it passed
+        here and failed on the Windows runner for exactly that reason."""
+        from unittest import mock
         from branch.profile import Profile
         from branch.runner import ScanRunner
         runner = ScanRunner(ROOT, {"plumbing": Profile.load(ROOT / "profiles" / "plumbing.yaml")})
         query = {"trade_slug": "plumbing", "location": "Dallas, TX", "narrow": "",
                  "coordinates": (32.78, -96.80), "radius": "25 miles",
                  "since": "Last hour", "sources": ["marketplace"]}
-        result = runner._collect(query, runner.profiles["plumbing"])
+        with mock.patch.object(ScanRunner, "_signed_in",
+                               staticmethod(lambda: {"facebook"})):
+            result = runner._collect(query, runner.profiles["plumbing"])
         self.assertNotIn("marketplace", result.unavailable)
+
+    def test_without_the_account_it_says_so_rather_than_opening_a_browser(self):
+        from unittest import mock
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        runner = ScanRunner(ROOT, {"plumbing": Profile.load(ROOT / "profiles" / "plumbing.yaml")})
+        query = {"trade_slug": "plumbing", "location": "Dallas, TX", "narrow": "",
+                 "coordinates": (32.78, -96.80), "radius": "25 miles",
+                 "since": "Last hour", "sources": ["marketplace"]}
+        with mock.patch.object(ScanRunner, "_signed_in", staticmethod(lambda: set())):
+            result = runner._collect(query, runner.profiles["plumbing"])
+        self.assertIn("sign in to Facebook", result.unavailable["marketplace"])
 
     def test_marketplace_carries_the_radius(self):
         from branch.sources.facebook import marketplace_url
@@ -476,13 +494,16 @@ class TestFacebook(unittest.TestCase):
         self.assertFalse(self.posts.geographic)
 
     def test_interactive_targets_are_offered_to_the_window(self):
+        from unittest import mock
         from branch.profile import Profile
         from branch.runner import ScanRunner
         runner = ScanRunner(ROOT, {"plumbing": Profile.load(ROOT / "profiles" / "plumbing.yaml")})
-        targets = runner.interactive_targets({
-            "trade_slug": "plumbing", "location": "Dallas, TX", "narrow": "",
-            "coordinates": (32.78, -96.80), "radius": "25 miles",
-            "since": "Last week", "sources": ["marketplace", "reddit"]})
+        with mock.patch.object(ScanRunner, "_signed_in",
+                               staticmethod(lambda: {"facebook"})):
+            targets = runner.interactive_targets({
+                "trade_slug": "plumbing", "location": "Dallas, TX", "narrow": "",
+                "coordinates": (32.78, -96.80), "radius": "25 miles",
+                "since": "Last week", "sources": ["marketplace", "reddit"]})
         self.assertEqual([t[0] for t in targets], ["marketplace"])
         self.assertTrue(targets[0][1].startswith("https://www.facebook.com/marketplace/"))
 
