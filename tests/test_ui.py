@@ -1137,3 +1137,40 @@ class TestNothingIsOnUntilYouTurnItOn(unittest.TestCase):
         self.w._emit_scan()
         self.assertEqual(len(asked), 1)
         self.assertEqual(asked[0]["sources"], ["reddit"])
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestTheProgramAgreesWithItsInstructions(unittest.TestCase):
+    """START-HERE.txt tells a new user to pick 50 miles and Last week. The
+    program started at 25 miles and Last 24 hours, so following the guide meant
+    changing two things first -- and not following it meant a first scan too
+    narrow to find anything."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.w = MainWindow(trades=["plumbing"])
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_the_defaults_are_what_the_guide_says(self):
+        query = self.w.current_query()
+        self.assertEqual(query["radius"], "50 miles")
+        self.assertEqual(query["since"], "Last week")
+
+    def test_the_guide_still_says_it(self):
+        guide = (ROOT / "START-HERE.txt").read_text(encoding="utf-8")
+        self.assertIn("50 miles", guide)
+        self.assertIn("Last week", guide)
+
+    def test_a_default_that_is_not_an_option_is_ignored_rather_than_crashing(self):
+        from branch.ui.window import DEFAULTS
+        for key, value in DEFAULTS.items():
+            with self.subTest(key=key):
+                options = next(o for k, _l, o in
+                               __import__("branch.ui.window", fromlist=["x"]).REFINE_FIELDS
+                               if k == key)
+                self.assertIn(value, options, f"{key} default is not on the list")

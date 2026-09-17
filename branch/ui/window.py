@@ -53,6 +53,12 @@ REFINE_FIELDS: list[tuple[str, str, list[str]]] = [
                                    "Last 3 days", "Last week", "Last month"]),
 ]
 
+#: Where the dropdowns start. Wide enough and far enough back that a first
+#: scan has something to find; the same numbers START-HERE.txt tells the user
+#: to choose, because the program and its instructions disagreeing is worse
+#: than either choice.
+DEFAULTS = {"radius": "50 miles", "since": "Last week"}
+
 # The eight source toggles. Availability is a per-adapter question, not a UI one;
 # the window only reflects what the adapter layer reports.
 SOURCES: list[tuple[str, str]] = [
@@ -329,7 +335,13 @@ class MainWindow(QWidget):
             else:
                 field = HouseComboBox(t)
                 field.addItems(options)
-                field.setCurrentIndex(2)          # 25 miles / last 24 hours
+                # What the instructions tell a new user to pick. They said 50
+                # miles and Last week while the program started at 25 miles and
+                # Last 24 hours, and a first scan that narrow -- on sources he
+                # has only just switched on -- is how somebody decides the
+                # program does not work.
+                if DEFAULTS.get(key) in options:
+                    field.setCurrentIndex(options.index(DEFAULTS[key]))
                 self._combos[key] = field
             field.setFixedHeight(t.s(Size.combo_h))
 
