@@ -15,22 +15,31 @@ who to contact. Branch never messages anyone.
 
 ## Install it — Windows
 
-**You do not need to install anything else. No Python, no accounts, no setup.**
+**You do not need Python, an account, or any setup.**
 
-1. Download **`Branch-windows.zip`** from [Releases](../../releases).
-2. Right-click it → **Extract All**. Put the folder wherever you like — Desktop is fine.
-3. Open the folder and read **`START-HERE.txt`**. It walks you through your first scan.
-4. Double-click **`Branch.exe`**.
+1. Download **`Branch-Setup.exe`** from [Releases](../../releases).
+2. Double-click it and click **Next**.
+3. Branch is now in your Start menu. Open it from there.
 
 Windows will say *"Windows protected your PC"* the first time. Click **More info** →
 **Run anyway**. That warning appears for every program that hasn't paid Microsoft for
-a signing certificate, and this one hasn't. Nothing is wrong.
+a signing certificate, and this one hasn't. Nothing is wrong — it says the same thing
+about the installer and about Branch itself the first time each one runs.
 
-**Keep the folder together.** `Branch.exe` needs the files beside it. Don't drag the
-.exe out on its own — make a shortcut to it instead.
+It installs for you only, so there is **no administrator password** to type. To remove
+it later: Settings → Apps → Branch → Uninstall. Your settings and any trades you tuned
+are left alone.
 
-The folder is about 500MB because it contains a web browser. That browser is how
-Branch reads Facebook, which is where most of the leads come from.
+It is a few hundred MB because it contains a web browser. That browser is how Branch
+reads Facebook, which is where most of the leads come from.
+
+<details>
+<summary>Would rather have a folder than an installer?</summary>
+
+Download **`Branch-windows.zip`** instead, right-click → **Extract All**, and run
+`Branch.exe` from inside. **Keep the folder together** — the .exe needs the files
+beside it, so make a shortcut rather than dragging it out.
+</details>
 
 ### Your first scan, in short
 

@@ -73,6 +73,24 @@ jobs:
       - name: Zip
         run: Compress-Archive -Path dist\Branch\* -DestinationPath Branch-windows.zip
 
+      # A zip is not an install. It asks somebody to extract a folder, keep it
+      # together, and find one .exe among a folder of DLLs -- and the person
+      # this is built for could not get past it. The installer is one file to
+      # double-click, and it puts Branch in the Start menu like any other
+      # program. Inno Setup ships on the GitHub Windows runner already.
+      - name: Installer
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          if (-not $version) { $version = "0.0.0" }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=$version installer.iss
+          if (-not (Test-Path Branch-Setup.exe)) {
+            Write-Error "the installer did not build"; exit 1
+          }
+          $size = (Get-Item Branch-Setup.exe).Length / 1MB
+          Write-Host ("Branch-Setup.exe is {0:N0}MB" -f $size)
+          # A few KB means it built an installer with no program inside it.
+          if ($size -lt 50) { Write-Error "installer is too small to contain Branch"; exit 1 }
+
       - uses: actions/upload-artifact@v4
         with:
           name: Branch-windows
@@ -83,4 +101,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: Branch-windows.zip
+          # The installer first: it is the one most people should take.
+          files: |
+            Branch-Setup.exe
+            Branch-windows.zip

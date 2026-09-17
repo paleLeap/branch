@@ -133,3 +133,51 @@ class TestWindowsPaths(unittest.TestCase):
             for bad in ('"/home/', "'/home/", '"/tmp/', "'/tmp/", '"/usr/'):
                 with self.subTest(module=path.name, pattern=bad):
                     self.assertNotIn(bad, text)
+
+
+class TestTheInstaller(unittest.TestCase):
+    """A zip is not an install. The friend this was built for could not get a
+    program out of one, so the release ships an installer as well."""
+
+    def setUp(self):
+        self.iss = (ROOT / "installer.iss").read_text(encoding="utf-8")
+        self.workflow = (ROOT / ".github" / "workflows"
+                         / "windows-build.yml").read_text(encoding="utf-8")
+
+    def test_the_installer_script_is_checked_in(self):
+        self.assertTrue((ROOT / "installer.iss").exists())
+
+    def test_it_installs_the_whole_folder_not_just_the_exe(self):
+        """Branch.exe alone is 2MB of nothing: Qt and Chromium live in
+        _internal, and without them it will not start."""
+        self.assertIn("recursesubdirs", self.iss)
+        self.assertIn(r"dist\Branch\*", self.iss)
+
+    def test_it_needs_no_administrator(self):
+        """Somebody installing a program a friend sent should not have to find
+        an admin password to do it."""
+        self.assertIn("PrivilegesRequired=lowest", self.iss)
+
+    def test_it_makes_a_start_menu_entry(self):
+        self.assertIn("[Icons]", self.iss)
+        self.assertIn("{group}\\Branch", self.iss.replace("{#AppName}", "Branch"))
+
+    def test_uninstalling_does_not_throw_away_the_users_tuning(self):
+        """Their tuned trades live in %APPDATA%; an uninstall must not take
+        them, and nothing here should delete that directory."""
+        self.assertNotIn("{userappdata}\\branch", self.iss.lower())
+
+    def test_ci_builds_it_and_refuses_an_empty_one(self):
+        self.assertIn("ISCC.exe", self.workflow)
+        self.assertIn("installer is too small", self.workflow)
+
+    def test_ci_attaches_it_to_the_release(self):
+        attach = self.workflow.split("Attach to release")[1]
+        self.assertIn("Branch-Setup.exe", attach)
+        self.assertIn("Branch-windows.zip", attach, "the zip is still offered")
+
+    def test_the_instructions_lead_with_the_installer(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertLess(readme.index("Branch-Setup.exe"),
+                        readme.index("Branch-windows.zip"),
+                        "the zip is offered before the installer")

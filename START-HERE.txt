@@ -9,14 +9,16 @@ messages anybody, ever.
 TO START IT
 -----------
 
-Double-click  Branch.exe  in this folder.
+Open  Branch  from your Start menu, or the shortcut on your desktop.
+
+If you got the ZIP instead of the installer, double-click  Branch.exe
+in this folder, and keep the whole folder together — Branch.exe needs
+the files next to it.
 
 The first time, Windows may say "Windows protected your PC".
 Click  More info  ->  Run anyway.
 That warning shows up for any program that hasn't paid Microsoft for a
 certificate. Nothing is wrong.
-
-Keep this whole folder together. Branch.exe needs the files next to it.
 
 
 YOUR FIRST SCAN — do exactly this
