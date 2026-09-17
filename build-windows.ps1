@@ -35,5 +35,11 @@ if ($LASTEXITCODE -ne 0) { throw "This build is incomplete -- see above." }
 Remove-Item Env:\QT_QPA_PLATFORM
 
 Write-Host ""
+# Same reason as the CI workflow: PyInstaller buries bundled files under
+# _internal, and START-HERE.txt is meant to be the first thing in the folder.
+foreach ($name in @("START-HERE.txt", "README.md", "LICENSE", "NOTICE")) {
+    Copy-Item "dist\Branch\_internal\$name" "dist\Branch\" -ErrorAction SilentlyContinue
+}
+
 Write-Host "Done. Run it with:  .\dist\Branch\Branch.exe"
 Write-Host "Zip dist\Branch\ to hand it to someone."

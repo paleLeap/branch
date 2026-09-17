@@ -69,6 +69,8 @@ class TestWindow(unittest.TestCase):
         self.assertIn("$0.25", self.w.status.text())
 
     def test_a_free_source_says_nothing_about_money(self):
+        """It says what it reads -- turning a source on is how you find out what
+        it is -- but a free source must never imply a bill."""
         from branch.profile import Profile
         from branch.runner import ScanRunner
         runner = ScanRunner(ROOT, Profile.load_all(ROOT / "profiles"))
@@ -76,7 +78,8 @@ class TestWindow(unittest.TestCase):
         self.w.status.setText("")
         self.w._sources["reddit"].setChecked(True)
         self.w._source_clicked("reddit")
-        self.assertEqual(self.w.status.text(), "")
+        self.assertNotIn("$", self.w.status.text())
+        self.assertNotIn("billed", self.w.status.text())
 
     def test_location_is_a_text_field_not_a_dropdown(self):
         """20,000 towns will not fit in a list."""
@@ -272,6 +275,7 @@ class TestWindow(unittest.TestCase):
     def test_return_in_query_also_scans(self):
         seen = []
         self.w.scan_requested.connect(seen.append)
+        self.w._sources["reddit"].setChecked(True)   # nothing is on by default
         self.w.query.returnPressed.emit()
         self.assertEqual(len(seen), 1)
 
@@ -1085,3 +1089,51 @@ class TestTheClockOnScreen(unittest.TestCase):
         self.w.scan_started()
         self.w.session_ended("time is up")
         self.assertEqual(self.w._session_started_at, 0.0)
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class TestNothingIsOnUntilYouTurnItOn(unittest.TestCase):
+    """Every source is opt-in. A new user's first scan used to run two sources
+    he had never looked at -- and Craigslist, first in the browser queue and the
+    least productive, decided his first impression of the program."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.w = MainWindow(trades=["plumbing"], trade_slugs={"plumbing": "plumbing"})
+
+    def tearDown(self):
+        self.w.deleteLater()
+
+    def test_no_source_starts_ticked(self):
+        ticked = [k for k, b in self.w._sources.items() if b.isChecked()]
+        self.assertEqual(ticked, [], f"{ticked} was on before anyone asked")
+
+    def test_a_scan_with_nothing_ticked_says_so_rather_than_running(self):
+        asked = []
+        self.w.scan_requested.connect(asked.append)
+        self.w._emit_scan()
+        self.assertEqual(asked, [], "scanned nothing and called it a scan")
+        self.assertIn("Pick a source", self.w.status.text())
+
+    def test_turning_one_on_says_what_it_is(self):
+        """Opting in and finding out are the same action."""
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        runner = ScanRunner(ROOT, Profile.load_all(ROOT / "profiles"))
+        self.w.set_source_states(runner.source_states())
+        self.w._sources["reddit"].setChecked(True)
+        self.w._source_clicked("reddit")
+        self.assertIn("Reddit:", self.w.status.text())
+        self.assertIn("subreddit", self.w.status.text().lower())
+
+    def test_a_scan_runs_once_something_is_ticked(self):
+        asked = []
+        self.w.scan_requested.connect(asked.append)
+        self.w._combos["trade"].setCurrentText("plumbing")
+        self.w._sources["reddit"].setChecked(True)
+        self.w._emit_scan()
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(asked[0]["sources"], ["reddit"])

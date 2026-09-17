@@ -361,10 +361,17 @@ class MainWindow(QWidget):
         for key, label in SOURCES:
             btn = SourceToggle(label)
             btn.setFixedHeight(t.s(Size.pill_h))
-            # Reddit and Craigslist need no account and no configuration, and
-            # both are local by construction -- so they are the two that are on
-            # before the user touches anything.
-            btn.setChecked(key in ("reddit", "craigslist"))
+            # NOTHING is on until the user turns it on. Reddit and Craigslist
+            # used to start ticked because they need no account -- which meant a
+            # new user's first scan ran two sources he had never looked at, one
+            # of which (Craigslist) goes first, is the slowest to disappoint and
+            # the least productive. His first impression of the program was
+            # decided by a choice he had not made.
+            #
+            # Every source now has to be reached for. Reaching for one is also
+            # how it explains what it is and what it needs, so opting in and
+            # finding out are the same action.
+            btn.setChecked(False)
             btn.set_state(SourceToggle.READY, t)
             btn.clicked.connect(lambda _=False, k=key: self._source_clicked(k))
             self._sources[key] = btn
@@ -419,12 +426,15 @@ class MainWindow(QWidget):
             # says what it costs at the moment it is ticked -- before Go, which
             # is the only point where saying it can still change the decision.
             if state is not None and btn is not None and btn.isChecked():
-                # What this source is about to do, said before Go rather than
-                # explained afterwards: what it costs, or which of two routes it
-                # is going to take.
+                # Turning a source on is also how the user finds out what it is.
+                # Nothing is on until they switch it on, so this is the moment
+                # the question gets asked -- what it costs, which route it will
+                # take, or failing both, plainly what it reads.
                 note = state.note or (
                     f"{state.label}: about ${state.cost:.2f} a scan, billed to "
-                    f"your own key" if state.cost else "")
+                    f"your own key" if state.cost
+                    else f"{state.label}: {state.description}"
+                    if state.description else "")
                 if note:
                     self.status.setText(note)
                     self.status.adjustSize()
@@ -561,7 +571,16 @@ class MainWindow(QWidget):
 
     def _emit_scan(self) -> None:
         self._prompt_list.hide()
-        self.scan_requested.emit(self.current_query())
+        query = self.current_query()
+        # With nothing ticked there is nothing to read, and a scan would run,
+        # find nothing and look exactly like a scan that searched. Say so
+        # instead -- and say what to do about it, since every source is off
+        # until the user turns one on.
+        if not query.get("sources"):
+            self.scan_stopped("Pick a source first -- click one to see what it "
+                              "is and what it needs.")
+            return
+        self.scan_requested.emit(query)
 
     def session_started(self) -> None:
         """A continuous session is in flight: Go becomes Stop and stays live."""

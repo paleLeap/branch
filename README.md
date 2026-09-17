@@ -34,9 +34,12 @@ Branch reads Facebook, which is where most of the leads come from.
 
 ### Your first scan, in short
 
-Pick your **trade** (start typing — there are 101), check the **city** it filled in,
-set **50 miles** and **Last week**, tick **Reddit** and **Facebook**, and press
-**Go, go, go.** Leave the search box empty the first time.
+Pick your **trade** (start typing — there are 101) and check the **city** it filled
+in. Set **50 miles** and **Last week**.
+
+**No source is switched on until you switch it on.** Click one and it tells you what
+it reads and what it needs. Turn on **Reddit** (needs nothing) and **Facebook**, then
+press **Go, go, go.** Leave the search box empty the first time.
 
 Facebook needs you to sign in once — click the Facebook button and it offers you the
 page. **Branch never sees your password.**

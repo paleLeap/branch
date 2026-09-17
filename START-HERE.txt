@@ -33,15 +33,23 @@ YOUR FIRST SCAN — do exactly this
 
 4. HOW RECENT "Last week" is a good start.
 
-5. SOURCES    Tick  Reddit  and  Facebook.
+5. SOURCES    NOTHING is switched on until you switch it on. That is
+              on purpose — you decide what this program reads.
+
+              Click a source and it tells you what it is and what it
+              needs. Click  Reddit  (needs nothing) and  Facebook .
+
               Leave the search box EMPTY the first time. Your trade
               already knows what its customers say.
 
-6. FACEBOOK   Click the Facebook button. It will tell you it needs an
-              account and offer you a sign-in page. Sign in there, in
-              Branch's own window.
+6. FACEBOOK   When you click Facebook it will say it needs an account
+              and offer you a sign-in page. Sign in there, in Branch's
+              own window.
               Branch NEVER sees your password. Use a spare account if
               you would rather.
+
+              This is the step people skip. Skip it and Facebook finds
+              nothing, and the scan still looks like it worked.
 
 7. GO         Press  Go, go, go.
 

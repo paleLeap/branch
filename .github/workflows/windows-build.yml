@@ -55,6 +55,21 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: .\dist\Branch\Branch.exe --check
 
+      # PyInstaller 6 puts every bundled data file under _internal\, including
+      # the ones written to be READ. Somebody who unzips this sees Branch.exe
+      # and a folder of DLLs, and the start guide -- the whole point of which is
+      # to be the first thing in the folder -- is three clicks away inside
+      # _internal. The NOTICE is required to be visible by CC BY 4.0, too.
+      # Copy them up beside the exe. They stay in _internal as well; the
+      # duplicates are a few kilobytes against a 212MB folder.
+      - name: Put the readable files where a person will see them
+        run: |
+          Copy-Item dist\Branch\_internal\START-HERE.txt dist\Branch\
+          Copy-Item dist\Branch\_internal\README.md dist\Branch\
+          Copy-Item dist\Branch\_internal\LICENSE dist\Branch\
+          Copy-Item dist\Branch\_internal\NOTICE dist\Branch\
+          if (-not (Test-Path dist\Branch\START-HERE.txt)) { exit 1 }
+
       - name: Zip
         run: Compress-Archive -Path dist\Branch\* -DestinationPath Branch-windows.zip
 
