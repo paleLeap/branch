@@ -349,6 +349,7 @@ class HarvestBrowser(QWidget):
         self._queue: list[tuple[str, str]] = []
         self._all_items: dict[str, Item] = {}
         self._not_found = 0
+        self._revealed = False
         self._cycle = 0
         self._expanding = False
         # Set while the window is open purely so the user can sign in. Nothing
@@ -550,6 +551,9 @@ class HarvestBrowser(QWidget):
         self._logging_in = ""
         self._unhook_login()
         if not keep:
+            # A new queue is a new piece of work, and may legitimately need the
+            # user again.
+            self._revealed = False
             self._queue = []
             self._all_items = {}
         self._items.clear()
@@ -586,7 +590,7 @@ class HarvestBrowser(QWidget):
             self._login_hooked = True
         self.view.load(QUrl(url))
         self.reveal(f"Sign in to {service} here. Branch never sees your password "
-                    "-- this is their own page. Close this window when you are done.")
+                    "-- this is their own page. Close this window when you are done.", again=True)
 
     def _unhook_login(self) -> None:
         """Detach the sign-in watcher, once, and only if it is attached."""
@@ -634,10 +638,19 @@ class HarvestBrowser(QWidget):
         if url:
             self.view.load(QUrl(url))
 
-    def reveal(self, why: str) -> None:
-        """Bring the window up, because something needs a person."""
+    def reveal(self, why: str, again: bool = False) -> None:
+        """Bring the window up, because something needs a person.
+
+        ONCE per run unless something new needs them. It used to raise itself
+        for every page that wanted help, and a scan of ten searches with no
+        session raised it ten times, on top of whatever the user was doing. If
+        they close it, that is an answer: leave it closed.
+        """
         if why:
             self._say(why)
+        if self._revealed and not again:
+            return
+        self._revealed = True
         self.show()
         self.raise_()
         self.activateWindow()

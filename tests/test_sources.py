@@ -1064,3 +1064,65 @@ class TestATickMeansSignedIn(unittest.TestCase):
                 if source.login_service:
                     self.assertEqual(source.state(set()).state, "login",
                                      f"{key} ticks without the account it needs")
+
+
+class TestTheBrowserStaysOutOfTheWay(unittest.TestCase):
+    """Reported from a friend's machine: "it continues to open the window used
+    to search Facebook on their actual desktop".
+
+    He was signed in to nothing, so every Facebook search in the queue hit a
+    login wall, and the browser raised itself on top of his desktop for each
+    one -- ten times for ten searches, and no posts at the end of it.
+    """
+
+    def setUp(self):
+        self.source = (ROOT / "branch" / "ui" / "browser.py").read_text(encoding="utf-8")
+
+    def test_a_source_with_no_session_is_never_opened(self):
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        from unittest import mock
+        runner = ScanRunner(ROOT, Profile.load_all(ROOT / "profiles"))
+        query = {"trade_slug": "plumbing", "location": "Dallas, TX",
+                 "coordinates": (32.78, -96.8), "radius": "25 miles",
+                 "since": "Last week", "sources": ["facebook", "groups", "craigslist"]}
+        with mock.patch.object(ScanRunner, "_signed_in", staticmethod(lambda: set())):
+            opened = [key for key, _u, _l in runner.interactive_targets(query)]
+        self.assertNotIn("facebook", opened)
+        self.assertNotIn("groups", opened)
+        self.assertIn("craigslist", opened, "a source needing no account still runs")
+
+    def test_it_is_opened_once_the_account_is_there(self):
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        from unittest import mock
+        runner = ScanRunner(ROOT, Profile.load_all(ROOT / "profiles"))
+        query = {"trade_slug": "plumbing", "location": "Dallas, TX",
+                 "coordinates": (32.78, -96.8), "radius": "25 miles",
+                 "since": "Last week", "sources": ["facebook"]}
+        with mock.patch.object(ScanRunner, "_signed_in",
+                               staticmethod(lambda: {"facebook"})):
+            opened = [key for key, _u, _l in runner.interactive_targets(query)]
+        self.assertEqual(opened, ["facebook"])
+
+    def test_a_skipped_source_says_why(self):
+        """Silent omission is a bug: a scan that did not search Facebook must
+        not look like one that searched and found nothing."""
+        from branch.profile import Profile
+        from branch.runner import ScanRunner
+        from unittest import mock
+        profiles = Profile.load_all(ROOT / "profiles")
+        runner = ScanRunner(ROOT, profiles)
+        query = {"trade_slug": "plumbing", "location": "Dallas, TX",
+                 "coordinates": (32.78, -96.8), "radius": "25 miles",
+                 "since": "Last week", "sources": ["facebook"]}
+        with mock.patch.object(ScanRunner, "_signed_in", staticmethod(lambda: set())):
+            result = runner._collect(query, profiles["plumbing"])
+        self.assertIn("sign in to Facebook", result.unavailable["facebook"])
+
+    def test_the_window_comes_up_once_not_once_per_page(self):
+        self.assertIn("if self._revealed and not again:", self.source)
+
+    def test_a_sign_in_the_user_asked_for_always_comes_up(self):
+        login = self.source.split("def open_login")[1].split("def ")[0]
+        self.assertIn("again=True", login)

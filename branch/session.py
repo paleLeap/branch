@@ -161,7 +161,8 @@ class Session(QObject):
 
         False when the clock has run out or the user stopped it -- and in that
         case the session is over, not paused. It will not start again without
-        somebody pressing Go.
+        somebody pressing Go. A session already stopped answers False without
+        needing to be told twice.
         """
         if not self._running:
             return False
@@ -179,8 +180,19 @@ class Session(QObject):
         self.ended.emit(why)
 
     def ask_stop(self) -> None:
-        """Stop after the pass in flight finishes reading what it has open."""
+        """Stop, now.
+
+        This used to mean "stop after the pass in flight finishes", which is
+        right about the reading -- the open page is still read out and its leads
+        still count -- but wrong about the BUTTON. The session only ended when
+        a pass reported in, so if the pass in flight never reported (nothing to
+        read, a source skipped, a browser that never returned) the window sat on
+        "Stop" with nothing running behind it.
+
+        The session is over the moment it is asked. Nothing further starts.
+        """
         self._stopping = True
+        self.stop("stopped")
 
     # -- what the user reads -------------------------------------------------
 

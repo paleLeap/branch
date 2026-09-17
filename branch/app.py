@@ -143,7 +143,21 @@ def build(theme) -> "MainWindow":
         window.browse(targets)
 
     def _requested(query: dict) -> None:
-        """Go was pressed. One pass, or the first pass of a session."""
+        """Go was pressed. One pass, or the first pass of a session.
+
+        A session needs something that can actually run. With only a source
+        that has no account behind it, every pass reads nothing, finishes, and
+        starts another one thirty seconds later -- forever, with the button
+        showing Stop the whole time.
+        """
+        runnable = [key for key in (query.get("sources") or [])
+                    if runner.sources.get(key) is not None]
+        skipped = runner.source_states(query.get("trade_slug"))
+        usable = [key for key in runnable if skipped[key].state != "unavailable"]
+        if not usable:
+            window.scan_stopped("Nothing to search -- those sources cannot run "
+                                "yet. Click one to see what it needs.")
+            return
         first = session.start(query, duration_seconds(query.get("run_for", "")))
         if first is None:
             _run_pass(query)

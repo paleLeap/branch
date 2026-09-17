@@ -98,17 +98,32 @@ class ScanRunner(QObject):
                 for key, source in self.sources.items()}
 
     def interactive_targets(self, query: dict) -> list[tuple[str, str, str]]:
-        """(key, url, label) for each chosen source that needs a browser."""
+        """(key, url, label) for each chosen source that needs a browser.
+
+        A source whose account is not signed in is NOT opened. Ten Facebook
+        searches with no session is ten login walls, and the browser threw
+        itself on top of whatever the user was doing for each one. The window
+        offers the sign-in instead, and the scan says the source was skipped.
+        """
         profile = self._profile(query)
         if profile is None:
             return []
         request = self._request(query, profile)
+        signed_in = self._signed_in()
         out = []
         for key in query.get("sources") or []:
             source = self.sources.get(key)
-            if source is not None and getattr(source, "interactive", False):
-                out.append((key, source.url(request), source.label))
+            if source is None or not getattr(source, "interactive", False):
+                continue
+            if source.login_service and source.login_service.lower() not in signed_in:
+                continue
+            out.append((key, source.url(request), source.label))
         return out
+
+    @staticmethod
+    def _signed_in() -> set[str]:
+        from . import accounts
+        return accounts.connected_services()
 
     def browse_queues(self, query: dict) -> dict[str, list[tuple[str, str]]]:
         """Every search each interactive source wants to work through."""
@@ -199,10 +214,15 @@ class ScanRunner(QObject):
             if fetched.items and not source.geographic:
                 notes.append(f"{source.label}: not filtered by location")
 
+        signed_in = self._signed_in()
         for key in chosen:
             source = self.sources.get(key)
             if source is None:
                 unavailable[key] = "unknown source"
+            elif (getattr(source, "interactive", False) and source.login_service
+                  and source.login_service.lower() not in signed_in):
+                unavailable[key] = (f"not searched -- sign in to "
+                                    f"{source.login_service} first")
         for key in self.sources:
             if key not in chosen and key not in unavailable:
                 unavailable.setdefault(key, "not selected")

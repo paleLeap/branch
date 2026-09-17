@@ -85,13 +85,18 @@ class TestSessionEnds(unittest.TestCase):
         s.finished_pass()
         self.assertEqual(seen, ["time is up"])
 
-    def test_stop_takes_effect_at_the_end_of_the_pass_in_flight(self):
+    def test_stop_means_stop_immediately(self):
+        """It used to end only when a pass reported in. If the pass in flight
+        never reported -- nothing to read, a skipped source, a browser that
+        never came back -- the window sat on "Stop" with nothing running."""
         s = Session()
+        ended = []
+        s.ended.connect(ended.append)
         s.start({"trade_slug": "plumbing"}, 600.0)
         s.ask_stop()
-        self.assertTrue(s.running)          # the open page is still being read
-        self.assertFalse(s.finished_pass())  # but nothing further is started
-        self.assertFalse(s.running)
+        self.assertFalse(s.running, "the session outlived the Stop button")
+        self.assertEqual(ended, ["stopped"])
+        self.assertFalse(s.finished_pass(), "a stopped session started another pass")
 
     def test_a_stopped_session_does_not_restart_itself(self):
         s = Session()
@@ -248,3 +253,18 @@ class TestTuningSurvivesASession(unittest.TestCase):
         s.absorb(ScanResult(leads=[], discarded=[thrown], scanned=10))
         merged = s.absorb(ScanResult(leads=[], discarded=[], scanned=0))
         self.assertEqual(len(merged.discarded), 1, "the tuning list went blank")
+
+
+class TestASessionNeedsSomethingToDo(unittest.TestCase):
+    """Reported live: a scan running with one source showed Stop and kept
+    running. A session whose sources cannot run reads nothing, finishes, and
+    starts another pass thirty seconds later -- forever."""
+
+    def setUp(self):
+        self.source = (ROOT / "branch" / "app.py").read_text(encoding="utf-8")
+
+    def test_go_refuses_a_query_with_nothing_runnable(self):
+        self.assertIn("Nothing to search", self.source)
+
+    def test_it_says_what_to_do_about_it(self):
+        self.assertIn("Click one to see what it needs", self.source)
